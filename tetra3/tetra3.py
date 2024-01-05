@@ -578,8 +578,7 @@ class Tetra3():
                           pattern_max_error=.005, simplify_pattern=False,
                           range_ra=None, range_dec=None,
                           presort_patterns=True, save_largest_edge=False,
-                          multiscale_step=1.5, epoch_proper_motion='now',
-                          evaluate_collisions=False):
+                          multiscale_step=1.5, epoch_proper_motion='now'):
         """Create a database and optionally save it to file.
 
         Takes a few minutes for a small (large FOV) database, can take many hours for a large (small FOV) database.
@@ -719,15 +718,13 @@ class Tetra3():
                 stellar proper motions are propagated. If 'now' (default), the current year is used.
                 If 'none' or None, star motions are not propagated and this allows catalogue entries
                 without proper motions to be used in the database.
-            evaluate_collisions (bool, optional): If True, measures and logs collisions
-                (pattern hash, hash index and pattern table). Default is False.
         """
         self._logger.debug('Got generate pattern catalogue with input: '
                            + str((max_fov, min_fov, save_as, star_catalog, pattern_stars_per_fov,
                                   verification_stars_per_fov, star_max_magnitude,
                                   pattern_max_error, simplify_pattern,
                                   range_ra, range_dec, presort_patterns, save_largest_edge,
-                                  multiscale_step, epoch_proper_motion, evaluate_collisions)))
+                                  multiscale_step, epoch_proper_motion)))
 
         assert star_catalog in _supported_databases, 'Star catalogue name must be one of: ' \
              + str(_supported_databases)
@@ -1106,13 +1103,6 @@ class Tetra3():
             pattern_largest_edge = np.zeros(catalog_length, dtype=np.float16)
             self._logger.info('Storing largest edges as type ' + str(pattern_largest_edge.dtype))
 
-        # Gather collision information.
-        pattern_hashes_seen = set()
-        pattern_hash_collisions = 0
-        hash_indices_seen = set()
-        hash_index_collisions = 0
-        table_collisions = 0
-
         # Go through each pattern and insert to the catalogue
         for (index, pattern) in enumerate(pattern_list):
             if index % 1000000 == 0 and index > 0:
@@ -1129,20 +1119,6 @@ class Tetra3():
             pattern_hash = tuple((edge_ratios * pattern_bins).astype(int))
             hash_index = _pattern_hash_to_index(pattern_hash, pattern_bins, catalog_length)
 
-            is_novel_index = False
-            if evaluate_collisions:
-                prev_len = len(pattern_hashes_seen)
-                pattern_hashes_seen.add(pattern_hash)
-                if prev_len == len(pattern_hashes_seen):
-                    pattern_hash_collisions += 1
-                else:
-                    prev_len = len(hash_indices_seen)
-                    hash_indices_seen.add(hash_index)
-                    if prev_len == len(hash_indices_seen):
-                        hash_index_collisions += 1
-                    else:
-                        is_novel_index = True
-
             if presort_patterns:
                 # find the centroid, or average position, of the star pattern
                 pattern_centroid = np.mean(vectors, axis=0)
@@ -1155,16 +1131,10 @@ class Tetra3():
             if save_largest_edge:
                 # Store as milliradian to better use float16 range
                 pattern_largest_edge[table_index] = edge_angles_sorted[-1]*1000
-            if is_novel_index and collision:
-                table_collisions += 1
 
         self._logger.info('Finished generating database.')
         self._logger.info('Size of uncompressed star table: %i Bytes.' %star_table.nbytes)
         self._logger.info('Size of uncompressed pattern catalog: %i Bytes.' %pattern_catalog.nbytes)
-        if evaluate_collisions:
-            self._logger.info('Collisions: pattern hash %s, index %s, table %s' %
-                              (pattern_hash_collisions, hash_index_collisions, table_collisions))
-
         self._star_table = star_table
         self._star_catalog_IDs = star_catID
         self._pattern_catalog = pattern_catalog
