@@ -1032,34 +1032,37 @@ class Tetra3():
             # Index conversion from pattern_star_table to main star_table
             pattern_index = np.nonzero(keep_at_fov)[0].tolist()
 
+            cos_fov = np.cos(pattern_fov)
+            fov_angle = pattern_fov
+            if simplify_pattern:
+                fov_angle /= 2
+            dist = 2 * np.sin(fov_angle/2)
+
             # Loop through all pattern stars, brightest first.
             for pattern[0] in range(pattern_star_table.shape[0]):
                 # Remove star from future consideration
                 available_stars[pattern[0]] = False
                 # Find all neighbours within FOV, keep only those not removed
                 vector = pattern_star_table[pattern[0], 2:5]
-                if simplify_pattern:
-                    neighbours = pattern_kd_tree.query_ball_point(vector, pattern_fov/2)
-                else:
-                    neighbours = pattern_kd_tree.query_ball_point(vector, pattern_fov)
+                neighbours = pattern_kd_tree.query_ball_point(vector, dist)
                 available = [available_stars[i] for i in neighbours]
                 neighbours = np.compress(available, neighbours)
                 # Check all possible patterns
                 for pattern[1:] in itertools.combinations(neighbours, pattern_size - 1):
+                    add_to_database = False
                     if simplify_pattern:
-                        # Add to database
-                        pattern_list.add(tuple(pattern_index[i] for i in pattern))
-                        if len(pattern_list) % 1000000 == 0:
-                            self._logger.info('Generated ' + str(len(pattern_list)) + ' patterns so far.')
+                        add_to_database = True
                     else:
                         # Unpack and measure angle between all vectors
                         vectors = pattern_star_table[pattern, 2:5]
                         dots = np.dot(vectors, vectors.T)
-                        if dots.min() > np.cos(pattern_fov):
+                        if dots.min() > cos_fov:
                             # Maximum angle is within the FOV limit, append with original index
-                            pattern_list.add(tuple(pattern_index[i] for i in pattern))
-                            if len(pattern_list) % 1000000 == 0:
-                                self._logger.info('Generated ' + str(len(pattern_list)) + ' patterns so far.')
+                            add_to_database = True
+                    if add_to_database:
+                        pattern_list.add(tuple(pattern_index[i] for i in pattern))
+                        if len(pattern_list) % 1000000 == 0:
+                            self._logger.info('Generated ' + str(len(pattern_list)) + ' patterns so far.')
         self._logger.info('Found %s patterns in total.' % len(pattern_list))
 
         # Repeat process, add in missing stars for verification task
@@ -1127,10 +1130,10 @@ class Tetra3():
                 # use the radii to uniquely order the pattern, used for future matching
                 pattern = np.array(pattern)[np.argsort(pattern_radii)]
 
-            (table_index, collision) = _insert_at_index(pattern, hash_index, pattern_catalog)
+            (index, collision) = _insert_at_index(pattern, hash_index, pattern_catalog)
             if save_largest_edge:
                 # Store as milliradian to better use float16 range
-                pattern_largest_edge[table_index] = edge_angles_sorted[-1]*1000
+                pattern_largest_edge[index] = edge_angles_sorted[-1]*1000
 
         self._logger.info('Finished generating database.')
         self._logger.info('Size of uncompressed star table: %i Bytes.' %star_table.nbytes)
@@ -1197,7 +1200,7 @@ class Tetra3():
                 a tested pattern a valid match. Default 1e-3. NEW: Corrected for the database size.
             solve_timeout (float, optional): Timeout in milliseconds after which the solver will
                 give up on matching patterns. Defaults to None.
-            target_pixel (numpy.ndarray, optional): Pixel coordiates to return RA/Dec for in
+            target_pixel (numpy.ndarray, optional): Pixel coordinates to return RA/Dec for in
                 addition to the default (the centre of the image). Size (N,2) where each row is the
                 (y, x) coordinate measured from top left corner of the image. Defaults to None.
             distortion (float or tuple, optional): Set the known distortion of the image as a scalar
@@ -1246,9 +1249,10 @@ class Tetra3():
                 dictionary except 'T_solve', and the optional return keys are missing.
         """
         assert self.has_database, 'No database loaded'
-        self._logger.debug('Got solve from image with input: ' + str((image, fov_estimate,
-            fov_max_error, pattern_checking_stars, match_radius, match_threshold,
-            solve_timeout, target_pixel, return_matches, kwargs)))
+        self._logger.debug('Got solve from image with input: ' + str(
+            (image, fov_estimate, fov_max_error, pattern_checking_stars, match_radius,
+             match_threshold, solve_timeout, target_pixel, distortion,
+             return_matches, return_visual, kwargs)))
         (width, height) = image.size[:2]
         self._logger.debug('Image (height, width): ' + str((height, width)))
 
@@ -1263,8 +1267,8 @@ class Tetra3():
             centroids = centr_data
         self._logger.debug('Found this many centroids, in time: ' + str((len(centroids), t_extract)))
         # Run centroid solver, passing arguments along (could clean up with kwargs handler)
-        solution = self.solve_from_centroids(centroids, (height, width),
-            fov_estimate=fov_estimate, fov_max_error=fov_max_error,
+        solution = self.solve_from_centroids(
+            centroids, (height, width), fov_estimate=fov_estimate, fov_max_error=fov_max_error,
             pattern_checking_stars=pattern_checking_stars, match_radius=match_radius,
             match_threshold=match_threshold, solve_timeout=solve_timeout,
             target_pixel=target_pixel, distortion=distortion,
@@ -1317,7 +1321,7 @@ class Tetra3():
                 a tested pattern a valid match. Default 1e-3. NEW: Corrected for the database size.
             solve_timeout (float, optional): Timeout in milliseconds after which the solver will
                 give up on matching patterns. Defaults to None.
-            target_pixel (numpy.ndarray, optional): Pixel coordiates to return RA/Dec for in
+            target_pixel (numpy.ndarray, optional): Pixel coordinates to return RA/Dec for in
                 addition to the default (the centre of the image). Size (N,2) where each row is the
                 (y, x) coordinate measured from top left corner of the image. Defaults to None.
             distortion (float or tuple, optional): Set the known distortion of the image as a scalar
@@ -1427,6 +1431,12 @@ class Tetra3():
                 image_centroids_preundist[i, :] = _undistort_centroids(
                     image_centroids, (height, width), k=k)
 
+        # Find the possible range of edge ratio patterns these four image centroids
+        # could correspond to.
+        pattlen = int(np.math.factorial(p_size) / 2 / np.math.factorial(p_size - 2) - 1)
+        image_pattern_edge_ratio_min = np.ones(pattlen)
+        image_pattern_edge_ratio_max = np.zeros(pattlen)
+
         # Try all combinations of p_size of pattern_checking_stars.
         for image_pattern_indices in itertools.combinations(
                 range(min(len(image_centroids), pattern_checking_stars)), p_size):
@@ -1439,12 +1449,6 @@ class Tetra3():
                     break
             # Set largest distance to None, this is cached to avoid recalculating in future FOV estimation.
             pattern_largest_distance = None
-
-            # Now find the possible range of edge ratio patterns these four image centroids
-            # could correspond to.
-            pattlen = int(np.math.factorial(p_size) / 2 / np.math.factorial(p_size - 2) - 1)
-            image_pattern_edge_ratio_min = np.ones(pattlen)
-            image_pattern_edge_ratio_max = np.zeros(pattlen)
 
             # No or already known distortion, use directly
             if distortion is None or isinstance(distortion, Number):
@@ -1513,7 +1517,7 @@ class Tetra3():
                 all_catalog_largest_edges = catalog_pattern_edges[:, -1]
                 all_catalog_edge_ratios = catalog_pattern_edges[:, :-1] / all_catalog_largest_edges[:, None]
 
-                # Compare catalogue edge ratios to the min/max range from the image pattern
+                # Compare catalogue edge ratios to the min/max range from the image pattern.
                 valid_patterns = np.argwhere(np.all(np.logical_and(
                     image_pattern_edge_ratio_min < all_catalog_edge_ratios,
                     image_pattern_edge_ratio_max > all_catalog_edge_ratios), axis=1)).flatten()
@@ -1554,8 +1558,8 @@ class Tetra3():
                             low_ind = 0
                             high_ind = 1
                         # How far do we need to go from low to high to reach zero
-                        x = np.mean(edge_ratio_errors_preundist[low_ind, :]
-                            /(edge_ratio_errors_preundist[low_ind, :] - edge_ratio_errors_preundist[high_ind, :]))
+                        x = np.mean(edge_ratio_errors_preundist[low_ind, :] /
+                                    (edge_ratio_errors_preundist[low_ind, :] - edge_ratio_errors_preundist[high_ind, :]))
                         # Distortion k estimate
                         dist_est = distortion_range[low_ind] + x*(distortion_range[high_ind] - distortion_range[low_ind])
                         # Undistort centroid pattern with estimate
