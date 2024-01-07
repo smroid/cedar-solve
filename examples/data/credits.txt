@@ -1,0 +1,5 @@
+The 2019-07-29*.jpg files are copies of the test data files from the Tetra3
+project (https://github.com/esa/tetra3). Used with permission under license
+terms "ESA/Gustav Pettersson CC BY-SA 3.0 IGO".
+
+The other images are provided by smr@dt3.org under the terms "CC BY-SA 3.0".
