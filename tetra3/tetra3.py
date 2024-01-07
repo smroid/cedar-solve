@@ -1656,157 +1656,158 @@ class Tetra3():
                                                           1 - prob_single_star_mismatch)
                     self._logger.debug("Mismatch probability = %.2e, at FOV = %.5fdeg" \
                                        % (prob_mismatch, np.rad2deg(fov)))
+                    if prob_mismatch >= match_threshold:
+                        continue
 
-                    if prob_mismatch < match_threshold:
-                        # diplay mismatch probability in scientific notation
-                        self._logger.debug("MATCH ACCEPTED")
-                        self._logger.debug("Prob: %.4g, corr: %.4g"
-                            % (prob_mismatch, prob_mismatch*num_patterns))
+                    # display mismatch probability in scientific notation
+                    self._logger.debug("MATCH ACCEPTED")
+                    self._logger.debug("Prob: %.4g, corr: %.4g"
+                                       % (prob_mismatch, prob_mismatch*num_patterns))
 
-                        # Get the vectors for all matches in the image using coarse fov
-                        matched_image_centroids = image_centroids[matched_stars[:, 0], :]
-                        matched_image_vectors = _compute_vectors(matched_image_centroids,
-                            (height, width), fov)
-                        matched_catalog_vectors = nearby_star_vectors[matched_stars[:, 1], :]
-                        # Recompute rotation matrix for more accuracy
-                        rotation_matrix = _find_rotation_matrix(matched_image_vectors, matched_catalog_vectors)
-                        # extract right ascension, declination, and roll from rotation matrix
-                        ra = np.rad2deg(np.arctan2(rotation_matrix[0, 1],
-                                                   rotation_matrix[0, 0])) % 360
-                        dec = np.rad2deg(np.arctan2(rotation_matrix[0, 2],
-                                                    norm(rotation_matrix[1:3, 2])))
-                        roll = np.rad2deg(np.arctan2(rotation_matrix[1, 2],
-                                                     rotation_matrix[2, 2])) % 360
+                    # Get the vectors for all matches in the image using coarse fov
+                    matched_image_centroids = image_centroids[matched_stars[:, 0], :]
+                    matched_image_vectors = _compute_vectors(matched_image_centroids,
+                                                             (height, width), fov)
+                    matched_catalog_vectors = nearby_star_vectors[matched_stars[:, 1], :]
+                    # Recompute rotation matrix for more accuracy
+                    rotation_matrix = _find_rotation_matrix(matched_image_vectors, matched_catalog_vectors)
+                    # extract right ascension, declination, and roll from rotation matrix
+                    ra = np.rad2deg(np.arctan2(rotation_matrix[0, 1],
+                                               rotation_matrix[0, 0])) % 360
+                    dec = np.rad2deg(np.arctan2(rotation_matrix[0, 2],
+                                                norm(rotation_matrix[1:3, 2])))
+                    roll = np.rad2deg(np.arctan2(rotation_matrix[1, 2],
+                                                 rotation_matrix[2, 2])) % 360
 
-                        if distortion is None:
-                            # Compare mutual angles in catalogue to those with current
-                            # FOV estimate in order to scale accurately for fine FOV
-                            angles_camera = 2 * np.arcsin(0.5 * pdist(matched_image_vectors))
-                            angles_catalogue = 2 * np.arcsin(0.5 * pdist(matched_catalog_vectors))
-                            fov *= np.mean(angles_catalogue / angles_camera)
-                            k = None
-                            matched_image_centroids_undist = matched_image_centroids
+                    if distortion is None:
+                        # Compare mutual angles in catalogue to those with current
+                        # FOV estimate in order to scale accurately for fine FOV
+                        angles_camera = 2 * np.arcsin(0.5 * pdist(matched_image_vectors))
+                        angles_catalogue = 2 * np.arcsin(0.5 * pdist(matched_catalog_vectors))
+                        fov *= np.mean(angles_catalogue / angles_camera)
+                        k = None
+                        matched_image_centroids_undist = matched_image_centroids
+                    else:
+                        # Accurately calculate the FOV and distortion by looking at the angle from boresight
+                        # on all matched catalogue vectors and all matched image centroids
+                        matched_catalog_vectors_derot = np.dot(rotation_matrix, matched_catalog_vectors.T).T
+                        tangent_matched_catalog_vectors = norm(matched_catalog_vectors_derot[:, 1:], axis=1) \
+                            /matched_catalog_vectors_derot[:, 0]
+                        # Get the (distorted) pixel distance from image centre for all matches
+                        # (scaled relative to width/2)
+                        radius_matched_image_centroids = norm(matched_image_centroids
+                                                              - [height/2, width/2], axis=1)/width*2
+                        # Solve system of equations in RMS sense for focal length f and distortion k
+                        # where f is focal length in units of image width/2
+                        # and k is distortion at width/2 (negative is barrel)
+                        # undistorted = distorted*(1 - k*(distorted*2/width)^2)
+                        A = np.hstack((tangent_matched_catalog_vectors[:, None],
+                                       radius_matched_image_centroids[:, None]**3))
+                        b = radius_matched_image_centroids[:, None]
+                        (f, k) = lstsq(A, b, rcond=None)[0].flatten()
+                        # Correct focal length to be at horizontal FOV
+                        f = f/(1 - k)
+                        self._logger.debug('Calculated focal length to %.2f and distortion to %.3f' % (f, k))
+                        # Calculate (horizontal) true field of view
+                        fov = 2*np.arctan(1/f)
+                        # Undistort centroids for final calculations
+                        matched_image_centroids_undist = _undistort_centroids(
+                            matched_image_centroids, (height, width), k)
+
+                    # Get vectors
+                    final_match_vectors = _compute_vectors(
+                        matched_image_centroids_undist, (height, width), fov)
+                    # Rotate to the sky
+                    final_match_vectors = np.dot(rotation_matrix.T, final_match_vectors.T).T
+
+                    # Calculate residual angles with more accurate formula
+                    distance = norm(final_match_vectors - matched_catalog_vectors, axis=1)
+                    angle = 2 * np.arcsin(.5 * distance)
+                    residual = np.rad2deg(np.sqrt(np.mean(angle**2))) * 3600
+
+                    # Solved in this time
+                    t_solve = (precision_timestamp() - t0_solve)*1000
+                    solution_dict = {'RA': ra, 'Dec': dec,
+                                     'Roll': roll,
+                                     'FOV': np.rad2deg(fov), 'distortion': k,
+                                     'RMSE': residual,
+                                     'Matches': num_star_matches,
+                                     'Prob': prob_mismatch*num_patterns,
+                                     'epoch_equinox': self._db_props['epoch_equinox'],
+                                     'epoch_proper_motion': self._db_props['epoch_proper_motion'],
+                                     'T_solve': t_solve}
+
+                    # If we were given target pixel(s), calculate their ra/dec
+                    if target_pixel is not None:
+                        self._logger.debug('Calculate RA/Dec for targets: '
+                                           + str(target_pixel))
+                        # Calculate the vector in the sky of the target pixel(s)
+                        target_pixel = _undistort_centroids(target_pixel, (height, width), k)
+                        target_vectors = _compute_vectors(
+                            target_pixel, (height, width), fov)
+                        rotated_target_vectors = np.dot(rotation_matrix.T, target_vectors.T).T
+                        # Calculate and add RA/Dec to solution
+                        target_ra = np.rad2deg(np.arctan2(rotated_target_vectors[:, 1],
+                                                          rotated_target_vectors[:, 0])) % 360
+                        target_dec = 90 - np.rad2deg(
+                            np.arccos(rotated_target_vectors[:,2]))
+
+                        if target_ra.shape[0] > 1:
+                            solution_dict['RA_target'] = target_ra.tolist()
+                            solution_dict['Dec_target'] = target_dec.tolist()
                         else:
-                            # Accurately calculate the FOV and distortion by looking at the angle from boresight
-                            # on all matched catalogue vectors and all matched image centroids
-                            matched_catalog_vectors_derot = np.dot(rotation_matrix, matched_catalog_vectors.T).T
-                            tangent_matched_catalog_vectors = norm(matched_catalog_vectors_derot[:, 1:], axis=1) \
-                                                                  /matched_catalog_vectors_derot[:, 0]
-                            # Get the (distorted) pixel distance from image centre for all matches
-                            # (scaled relative to width/2)
-                            radius_matched_image_centroids = norm(matched_image_centroids
-                                                                 - [height/2, width/2], axis=1)/width*2
-                            # Solve system of equations in RMS sense for focal length f and distortion k
-                            # where f is focal length in units of image width/2
-                            # and k is distortion at width/2 (negative is barrel)
-                            # undistorted = distorted*(1 - k*(distorted*2/width)^2)
-                            A = np.hstack((tangent_matched_catalog_vectors[:, None],
-                                           radius_matched_image_centroids[:, None]**3))
-                            b = radius_matched_image_centroids[:, None]
-                            (f, k) = lstsq(A, b, rcond=None)[0].flatten()
-                            # Correct focal length to be at horizontal FOV
-                            f = f/(1 - k)
-                            self._logger.debug('Calculated focal length to %.2f and distortion to %.3f' % (f, k))
-                            # Calculate (horizontal) true field of view
-                            fov = 2*np.arctan(1/f)
-                            # Undistort centroids for final calculations
-                            matched_image_centroids_undist = _undistort_centroids(
-                                matched_image_centroids, (height, width), k)
+                            solution_dict['RA_target'] = target_ra[0]
+                            solution_dict['Dec_target'] = target_dec[0]
 
-                        # Get vectors
-                        final_match_vectors = _compute_vectors(
-                            matched_image_centroids_undist, (height, width), fov)
-                        # Rotate to the sky
-                        final_match_vectors = np.dot(rotation_matrix.T, final_match_vectors.T).T
+                    # If requested to return data about matches, append to dict
+                    if return_matches:
+                        match_data = self._get_matched_star_data(
+                            image_centroids[matched_stars[:, 0]], nearby_star_inds[matched_stars[:, 1]])
+                        solution_dict.update(match_data)
 
-                        # Calculate residual angles with more accurate formula
-                        distance = norm(final_match_vectors - matched_catalog_vectors, axis=1)
-                        angle = 2 * np.arcsin(.5 * distance)
-                        residual = np.rad2deg(np.sqrt(np.mean(angle**2))) * 3600
+                    # If requested to create a visualisation, do so and append
+                    if return_visual:
+                        self._logger.debug('Generating visualisation')
+                        img = Image.new('RGB', (width, height))
+                        img_draw = ImageDraw.Draw(img)
+                        # Make list of matched and not from catalogue
+                        matched = matched_stars[:, 1]
+                        not_matched = np.array([True]*len(nearby_star_centroids))
+                        not_matched[matched] = False
+                        not_matched = np.flatnonzero(not_matched)
 
-                        # Solved in this time
-                        t_solve = (precision_timestamp() - t0_solve)*1000
-                        solution_dict = {'RA': ra, 'Dec': dec,
-                                         'Roll': roll,
-                                         'FOV': np.rad2deg(fov), 'distortion': k,
-                                         'RMSE': residual,
-                                         'Matches': num_star_matches,
-                                         'Prob': prob_mismatch*num_patterns,
-                                         'epoch_equinox': self._db_props['epoch_equinox'],
-                                         'epoch_proper_motion': self._db_props['epoch_proper_motion'],
-                                         'T_solve': t_solve}
+                        def draw_circle(centre, radius, **kwargs):
+                            bbox = [centre[1] - radius,
+                                    centre[0] - radius,
+                                    centre[1] + radius,
+                                    centre[0] + radius]
+                            img_draw.ellipse(bbox, **kwargs)
 
-                        # If we were given target pixel(s), calculate their ra/dec
-                        if target_pixel is not None:
-                            self._logger.debug('Calculate RA/Dec for targets: '
-                                + str(target_pixel))
-                            # Calculate the vector in the sky of the target pixel(s)
-                            target_pixel = _undistort_centroids(target_pixel, (height, width), k)
-                            target_vectors = _compute_vectors(
-                                target_pixel, (height, width), fov)
-                            rotated_target_vectors = np.dot(rotation_matrix.T, target_vectors.T).T
-                            # Calculate and add RA/Dec to solution
-                            target_ra = np.rad2deg(np.arctan2(rotated_target_vectors[:, 1],
-                                                              rotated_target_vectors[:, 0])) % 360
-                            target_dec = 90 - np.rad2deg(
-                                np.arccos(rotated_target_vectors[:,2]))
+                        for cent in image_centroids:
+                            # Centroids with no/given distortion
+                            draw_circle(cent, 2, fill='white')
+                        for cent in image_centroids_undist:
+                            # Image centroids with coarse distortion for matching
+                            draw_circle(cent, 1, fill='darkorange')
+                        for cent in image_centroids_undist[image_pattern_indices, :]:
+                            # Make the pattern ones larger
+                            draw_circle(cent, 3, outline='darkorange')
+                        for cent in matched_image_centroids_undist:
+                            # Centroid position with solution distortion
+                            draw_circle(cent, 1, fill='green')
+                        for match in matched:
+                            # Green circle for succeessful match
+                            draw_circle(nearby_star_centroids[match],
+                                        width*match_radius, outline='green')
+                        for match in not_matched:
+                            # Red circle for failed match
+                            draw_circle(nearby_star_centroids[match],
+                                        width*match_radius, outline='red')
 
-                            if target_ra.shape[0] > 1:
-                                solution_dict['RA_target'] = target_ra.tolist()
-                                solution_dict['Dec_target'] = target_dec.tolist()
-                            else:
-                                solution_dict['RA_target'] = target_ra[0]
-                                solution_dict['Dec_target'] = target_dec[0]
+                        solution_dict['visual'] = img
 
-                        # If requested to return data about matches, append to dict
-                        if return_matches:
-                            match_data = self._get_matched_star_data(
-                                image_centroids[matched_stars[:, 0]], nearby_star_inds[matched_stars[:, 1]])
-                            solution_dict.update(match_data)
-
-                        # If requested to create a visualisation, do so and append
-                        if return_visual:
-                            self._logger.debug('Generating visualisation')
-                            img = Image.new('RGB', (width, height))
-                            img_draw = ImageDraw.Draw(img)
-                            # Make list of matched and not from catalogue
-                            matched = matched_stars[:, 1]
-                            not_matched = np.array([True]*len(nearby_star_centroids))
-                            not_matched[matched] = False
-                            not_matched = np.flatnonzero(not_matched)
-
-                            def draw_circle(centre, radius, **kwargs):
-                                bbox = [centre[1] - radius,
-                                        centre[0] - radius,
-                                        centre[1] + radius,
-                                        centre[0] + radius]
-                                img_draw.ellipse(bbox, **kwargs)
-
-                            for cent in image_centroids:
-                                # Centroids with no/given distortion
-                                draw_circle(cent, 2, fill='white')
-                            for cent in image_centroids_undist:
-                                # Image centroids with coarse distortion for matching
-                                draw_circle(cent, 1, fill='darkorange')
-                            for cent in image_centroids_undist[image_pattern_indices, :]:
-                                # Make the pattern ones larger
-                                draw_circle(cent, 3, outline='darkorange')
-                            for cent in matched_image_centroids_undist:
-                                # Centroid position with solution distortion
-                                draw_circle(cent, 1, fill='green')
-                            for match in matched:
-                                # Green circle for succeessful match
-                                draw_circle(nearby_star_centroids[match],
-                                    width*match_radius, outline='green')
-                            for match in not_matched:
-                                # Red circle for failed match
-                                draw_circle(nearby_star_centroids[match],
-                                    width*match_radius, outline='red')
-
-                            solution_dict['visual'] = img
-
-                        self._logger.debug(solution_dict)
-                        return solution_dict
+                    self._logger.debug(solution_dict)
+                    return solution_dict
 
         # Failed to solve, get time and return None
         t_solve = (precision_timestamp() - t0_solve) * 1000
