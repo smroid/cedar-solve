@@ -264,6 +264,13 @@ def _find_centroid_matches(image_centroids, catalog_centroids, r):
     matches = matches[np.unique(matches[:, 1], return_index=True)[1], :]
     return matches
 
+def _separation_for_density(fov, stars_per_fov):
+    """Compute minimum separation, in radians, for achieving the desired star density.
+    fov: horizontal field of view in radians.
+    stars_per_fov: desired number of stars in field of view
+    """
+    return .6 * fov / np.sqrt(stars_per_fov)
+
 class Tetra3():
     """Solve star patterns and manage databases.
 
@@ -999,10 +1006,12 @@ class Tetra3():
             keep_at_fov = np.full(num_entries, False)
             if fov_divisions == 1:
                 # Single scale database, trim to min_fov, make patterns up to max_fov
-                pattern_stars_separation = .6 * min_fov / np.sqrt(pattern_stars_per_fov)
+                pattern_stars_separation = _separation_for_density(
+                    min_fov, pattern_stars_per_fov)
             else:
                 # Multiscale database, trim and make patterns iteratively at smaller FOVs
-                pattern_stars_separation = .6 * pattern_fov / np.sqrt(pattern_stars_per_fov)
+                pattern_stars_separation = _separation_for_density(
+                    pattern_fov, pattern_stars_per_fov)
 
             self._logger.info('At FOV ' + str(round(np.rad2deg(pattern_fov), 5)) + ' separate stars by ' \
                 + str(np.rad2deg(pattern_stars_separation)) + 'deg.')
@@ -1066,7 +1075,8 @@ class Tetra3():
         self._logger.info('Found %s patterns in total.' % len(pattern_list))
 
         # Repeat process, add in missing stars for verification task
-        verification_stars_separation = .6 * min_fov / np.sqrt(verification_stars_per_fov)
+        verification_stars_separation = _separation_for_density(
+            min_fov, verification_stars_per_fov)
         keep_for_verifying = keep_for_patterns.copy()
         for star_ind in range(1, num_entries):
             vector = all_star_vectors[star_ind, :]
