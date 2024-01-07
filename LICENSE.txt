@@ -174,7 +174,7 @@
       of your accepting any such warranty or additional liability.
 
    END OF TERMS AND CONDITIONS
-   
+
 -----------------------------------------------------------------------------
 
 Original license notice for Tetra, of which tetra3 is a derivative:
