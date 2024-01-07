@@ -512,6 +512,8 @@ class Tetra3():
         if self._db_props['min_fov'] is None:
             self._logger.debug('No min_fov key, copy from max_fov')
             self._db_props['min_fov'] = self._db_props['max_fov']
+        self._logger.debug('Database pattern_max_error: %s' %
+                           self._db_props['pattern_max_error'])
 
     def save_database(self, path):
         """Save database to file.
@@ -529,7 +531,7 @@ class Tetra3():
         else:
             self._logger.debug('Not a string, use as path directly')
             path = Path(path).with_suffix('.npz')
-            
+
         self._logger.info('Saving database to: ' + str(path))
 
         # Pack properties as numpy structured array
@@ -732,6 +734,9 @@ class Tetra3():
                                   pattern_max_error, simplify_pattern,
                                   range_ra, range_dec, presort_patterns, save_largest_edge,
                                   multiscale_step, epoch_proper_motion)))
+
+        # If True, measures and logs collisions (pattern hash, hash index and pattern table).
+        EVALUATE_COLLISIONS = True
 
         assert star_catalog in _supported_databases, 'Star catalogue name must be one of: ' \
              + str(_supported_databases)
@@ -1116,6 +1121,13 @@ class Tetra3():
             pattern_largest_edge = np.zeros(catalog_length, dtype=np.float16)
             self._logger.info('Storing largest edges as type ' + str(pattern_largest_edge.dtype))
 
+        # Gather collision information.
+        pattern_hashes_seen = set()
+        pattern_hash_collisions = 0
+        hash_indices_seen = set()
+        hash_index_collisions = 0
+        table_collisions = 0
+
         # Go through each pattern and insert to the catalogue
         for (index, pattern) in enumerate(pattern_list):
             if index % 1000000 == 0 and index > 0:
@@ -1132,6 +1144,20 @@ class Tetra3():
             pattern_hash = tuple((edge_ratios * pattern_bins).astype(int))
             hash_index = _pattern_hash_to_index(pattern_hash, pattern_bins, catalog_length)
 
+            is_novel_index = False
+            if EVALUATE_COLLISIONS:
+                prev_len = len(pattern_hashes_seen)
+                pattern_hashes_seen.add(pattern_hash)
+                if prev_len == len(pattern_hashes_seen):
+                    pattern_hash_collisions += 1
+                else:
+                    prev_len = len(hash_indices_seen)
+                    hash_indices_seen.add(hash_index)
+                    if prev_len == len(hash_indices_seen):
+                        hash_index_collisions += 1
+                    else:
+                        is_novel_index = True
+
             if presort_patterns:
                 # find the centroid, or average position, of the star pattern
                 pattern_centroid = np.mean(vectors, axis=0)
@@ -1144,10 +1170,15 @@ class Tetra3():
             if save_largest_edge:
                 # Store as milliradian to better use float16 range
                 pattern_largest_edge[index] = edge_angles_sorted[-1]*1000
+            if is_novel_index and collision:
+                table_collisions += 1
 
         self._logger.info('Finished generating database.')
         self._logger.info('Size of uncompressed star table: %i Bytes.' %star_table.nbytes)
         self._logger.info('Size of uncompressed pattern catalog: %i Bytes.' %pattern_catalog.nbytes)
+        if EVALUATE_COLLISIONS:
+            self._logger.info('Collisions: pattern hash %s, index %s, table %s' %
+                              (pattern_hash_collisions, hash_index_collisions, table_collisions))
         self._star_table = star_table
         self._star_catalog_IDs = star_catID
         self._pattern_catalog = pattern_catalog
