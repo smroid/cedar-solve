@@ -1485,6 +1485,8 @@ class Tetra3():
             for (i, k) in enumerate(distortion_range):
                 image_centroids_preundist[i, :] = _undistort_centroids(
                     image_centroids, (height, width), k=k)
+        # Compute star vectors using an estimate for the field-of-view in the x dimension
+        image_centroids_vectors = _compute_vectors(image_centroids, (height, width), fov_initial)
 
         # Find the possible range of edge ratio patterns these four image centroids
         # could correspond to.
@@ -1507,8 +1509,7 @@ class Tetra3():
 
             # No or already known distortion, use directly
             if distortion is None or isinstance(distortion, Number):
-                # Compute star vectors using an estimate for the field-of-view in the x dimension
-                image_pattern_vectors = _compute_vectors(image_pattern_centroids, (height, width), fov_initial)
+                image_pattern_vectors = image_centroids_vectors[image_pattern_indices, :]
                 # Calculate what the edge ratios are and broaden by p_max_err tolerance
                 edge_angles_sorted = np.sort(2 * np.arcsin(.5 * pdist(image_pattern_vectors)))
                 image_pattern_largest_edge = edge_angles_sorted[-1]
