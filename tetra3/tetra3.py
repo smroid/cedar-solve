@@ -1823,7 +1823,8 @@ class Tetra3():
                         self._logger.debug('Calculate RA/Dec for targets: '
                                            + str(target_pixel))
                         # Calculate the vector in the sky of the target pixel(s)
-                        target_pixel = _undistort_centroids(target_pixel, (height, width), k)
+                        if k is not None:
+                            target_pixel = _undistort_centroids(target_pixel, (height, width), k)
                         target_vectors = _compute_vectors(
                             target_pixel, (height, width), fov)
                         rotated_target_vectors = np.dot(rotation_matrix.T, target_vectors.T).T
