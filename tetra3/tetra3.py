@@ -1509,6 +1509,10 @@ class Tetra3():
         # Compute star vectors using an estimate for the field-of-view in the x dimension
         image_centroids_vectors = _compute_vectors(image_centroids, (height, width), fov_initial)
 
+        pattern_stars_per_fov = self._db_props['pattern_stars_per_fov']
+        pattern_stars_separation = _separation_for_density(
+            fov_initial, pattern_stars_per_fov)
+
         # Find the possible range of edge ratio patterns these four image centroids
         # could correspond to.
         pattlen = int(np.math.factorial(p_size) / 2 / np.math.factorial(p_size - 2) - 1)
@@ -1563,6 +1567,8 @@ class Tetra3():
                 image_pattern_edge_ratio_min = np.min(image_pattern_edge_ratio_preundist, axis=0) - p_max_err
                 image_pattern_edge_ratio_max = np.max(image_pattern_edge_ratio_preundist, axis=0) + p_max_err
 
+            if fov_estimate is not None and edge_angles_sorted[0] < pattern_stars_separation:
+                continue
             image_patterns_evaluated += 1
 
             # Possible range of pattern hashes we need to look up
