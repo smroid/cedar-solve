@@ -1494,6 +1494,12 @@ class Tetra3():
         image_pattern_edge_ratio_min = np.ones(pattlen)
         image_pattern_edge_ratio_max = np.zeros(pattlen)
 
+        catalog_lookup_count = 0
+        catalog_eval_count = 0
+        image_patterns_evaluated = 0
+        search_space_explored = 0
+        search_space_explored_final_pattern = 0
+
         # Try all combinations of p_size of pattern_checking_stars.
         for image_pattern_indices in itertools.combinations(
                 range(min(len(image_centroids), pattern_checking_stars)), p_size):
@@ -1516,17 +1522,25 @@ class Tetra3():
                 image_pattern = edge_angles_sorted[:-1] / image_pattern_largest_edge
                 image_pattern_edge_ratio_min = image_pattern - p_max_err
                 image_pattern_edge_ratio_max = image_pattern + p_max_err
+                image_pattern_hash = (image_pattern*p_bins).astype(int)
             else:
                 # Calculate edge ratios for all predistortions, take max/min
                 image_pattern_edge_ratio_preundist = np.zeros((len(distortion_range), pattlen))
                 for i in range(len(distortion_range)):
                     image_pattern_vectors = _compute_vectors(
                         image_centroids_preundist[i, image_pattern_indices], (height, width), fov_initial)
-                    edge_angles_sorted = np.sort(2 * np.arcsin(.5 * pdist(image_pattern_vectors)))
-                    image_pattern_largest_edge = edge_angles_sorted[-1]
-                    image_pattern_edge_ratio_preundist[i, :] = edge_angles_sorted[:-1] / image_pattern_largest_edge
-                image_pattern_edge_ratio_min = np.min(image_pattern_edge_ratio_preundist, axis=0)
-                image_pattern_edge_ratio_max = np.max(image_pattern_edge_ratio_preundist, axis=0)
+                    preundist_edge_angles_sorted = np.sort(2 * np.arcsin(.5 * pdist(image_pattern_vectors)))
+                    image_pattern_largest_edge = preundist_edge_angles_sorted[-1]
+                    image_pattern_edge_ratio_preundist[i, :] = \
+                        preundist_edge_angles_sorted[:-1] / image_pattern_largest_edge
+                    if i == len(distortion_range) // 2:
+                        edge_angles_sorted = preundist_edge_angles_sorted
+                        image_pattern = edge_angles_sorted[:-1] / edge_angles_sorted[-1]
+                        image_pattern_hash = (image_pattern*p_bins).astype(int)
+                image_pattern_edge_ratio_min = np.min(image_pattern_edge_ratio_preundist, axis=0) - p_max_err
+                image_pattern_edge_ratio_max = np.max(image_pattern_edge_ratio_preundist, axis=0) + p_max_err
+
+            image_patterns_evaluated += 1
 
             # Possible range of pattern hashes we need to look up
             pattern_hash_space_min = np.maximum(0, image_pattern_edge_ratio_min*p_bins).astype(int)
@@ -1534,41 +1548,29 @@ class Tetra3():
             # Make a list of the low/high values in each binned edge ratio position.
             pattern_hash_range = list(range(low, high + 1) for (low, high) in zip(pattern_hash_space_min,
                                                                                   pattern_hash_space_max))
-            pattern_hash_list = np.array(list(code for code in itertools.product(*pattern_hash_range)))
-            # Make sure we have unique ascending codes
-            pattern_hash_list = np.sort(pattern_hash_list, axis=1)
-            pattern_hash_list = np.unique(pattern_hash_list, axis=0)
+            def dist(pattern_hash):
+                return sum((a-b)*(a-b) for (a, b) in zip(pattern_hash, image_pattern_hash))
 
-            # Calculate hash index for each
-            hash_indices = _pattern_hash_to_index(pattern_hash_list, p_bins, self.pattern_catalog.shape[0])
-            # iterate over hash code space
-            i = 1
-            for hash_index in hash_indices:
-                hash_match_inds = _get_table_indices_from_hash(hash_index, self.pattern_catalog)
-                if len(hash_match_inds) == 0:
+            # Make a list of all pattern hash values to explore; tag each with its distance from
+            # 'image_pattern_hash' for sorting, so the first pattern hash values we try are the
+            # ones closest to what we measured in the image to be solved.
+            pattern_hash_list = list((dist(code), code) for code in itertools.product(*pattern_hash_range))
+            pattern_hash_list.sort()
+
+            # Iterate over pattern hash values, starting from 'image_pattern_hash' and working
+            # our way outward.
+            search_space_explored_final_pattern = 0
+            for (_, pattern_hash) in pattern_hash_list:
+                search_space_explored += 1
+                search_space_explored_final_pattern += 1
+                # Calculate corresponding hash index.
+                hash_index = _pattern_hash_to_index(pattern_hash, p_bins, self.pattern_catalog.shape[0])
+
+                (catalog_pattern_edges, all_catalog_pattern_vectors) = \
+                    self._get_all_patterns_for_index(hash_index, upper_tri_index, fov_estimate, fov_max_error)
+                if catalog_pattern_edges is None:
                     continue
-
-                if self.pattern_largest_edge is not None \
-                        and fov_estimate is not None \
-                        and fov_max_error is not None:
-                    # Can immediately compare FOV to patterns to remove mismatches
-                    largest_edge = self.pattern_largest_edge[hash_match_inds]
-                    fov2 = largest_edge / image_pattern_largest_edge * fov_initial / 1000
-                    keep = abs(fov2 - fov_estimate) < fov_max_error
-                    hash_match_inds = hash_match_inds[keep]
-                    if len(hash_match_inds) == 0:
-                        continue
-                catalog_matches = self.pattern_catalog[hash_match_inds, :]
-
-                # Get star vectors for all matching hashes
-                all_catalog_pattern_vectors = self.star_table[catalog_matches, 2:5]
-                # Calculate pattern by angles between vectors
-                # this is a bit manual, I could not see a faster way
-                arr1 = np.take(all_catalog_pattern_vectors, upper_tri_index[0], axis=1)
-                arr2 = np.take(all_catalog_pattern_vectors, upper_tri_index[1], axis=1)
-                catalog_pattern_edges = np.sort(norm(arr1 - arr2, axis=-1))
-                # implement more accurate angle calculation
-                catalog_pattern_edges = 2 * np.arcsin(.5 * catalog_pattern_edges)
+                catalog_lookup_count += len(catalog_pattern_edges)
 
                 all_catalog_largest_edges = catalog_pattern_edges[:, -1]
                 all_catalog_edge_ratios = catalog_pattern_edges[:, :-1] / all_catalog_largest_edges[:, None]
@@ -1580,6 +1582,7 @@ class Tetra3():
 
                 # Go through each matching pattern and calculate further
                 for index in valid_patterns:
+                    catalog_eval_count += 1
                     # Estimate coarse distortion from the pattern
                     if distortion is None or isinstance(distortion, Number):
                         # Distortion is known, set variables and estimate FOV
@@ -1853,15 +1856,61 @@ class Tetra3():
                         solution_dict['visual'] = img
 
                     self._logger.debug(solution_dict)
+                    self._logger.debug(
+                        'Evaluated %s image patterns; searched %s pattern hashes; %s for final pattern' %
+                        (image_patterns_evaluated,
+                         search_space_explored,
+                         search_space_explored_final_pattern))
+                    self._logger.debug(
+                        'Looked up/evaluated %s/%s catalog patterns' %
+                        (catalog_lookup_count, catalog_eval_count))
                     return solution_dict
 
         # Failed to solve, get time and return None
         t_solve = (precision_timestamp() - t0_solve) * 1000
         self._logger.debug('FAIL: Did not find a match to the stars! It took '
                            + str(round(t_solve)) + ' ms.')
+        self._logger.debug(
+            'Evaluated %s image patterns; searched %s pattern hashes; %s for final pattern' %
+            (image_patterns_evaluated,
+             search_space_explored,
+             search_space_explored_final_pattern))
+        self._logger.debug(
+            'Looked up/evaluated %s/%s catalog patterns' %
+            (catalog_lookup_count, catalog_eval_count))
         return {'RA': None, 'Dec': None, 'Roll': None, 'FOV': None, 'distortion': None,
                 'RMSE': None, 'Matches': None, 'Prob': None, 'epoch_equinox': None,
                 'epoch_proper_motion': None, 'T_solve': t_solve}
+
+    def _get_all_patterns_for_index(self, hash_index, upper_tri_index, fov_estimate, fov_max_error):
+        """Returns (edges, vectors) for all pattern table entries for `hash_index`."""
+        # Iterate over table hash indices.
+        hash_match_inds = _get_table_indices_from_hash(hash_index, self.pattern_catalog)
+        if len(hash_match_inds) == 0:
+            return (None, None)
+
+        if self.pattern_largest_edge is not None \
+           and fov_estimate is not None \
+           and fov_max_error is not None:
+            # Can immediately compare FOV to patterns to remove mismatches
+            largest_edge = self.pattern_largest_edge[hash_match_inds]
+            fov2 = largest_edge / image_pattern_largest_edge * fov_initial / 1000
+            keep = abs(fov2 - fov_estimate) < fov_max_error
+            hash_match_inds = hash_match_inds[keep]
+            if len(hash_match_inds) == 0:
+                return (None, None)
+        catalog_matches = self.pattern_catalog[hash_match_inds, :]
+
+        # Get star vectors for all matching hashes
+        catalog_pattern_vectors = self.star_table[catalog_matches, 2:5]
+        # Calculate pattern by angles between vectors
+        # implement more accurate angle calculation
+        # this is a bit manual, I could not see a faster way
+        arr1 = np.take(catalog_pattern_vectors, upper_tri_index[0], axis=1)
+        arr2 = np.take(catalog_pattern_vectors, upper_tri_index[1], axis=1)
+        catalog_pattern_edges = np.sort(2 * np.arcsin(.5 * norm(arr1 - arr2, axis=-1)))
+
+        return (catalog_pattern_edges, catalog_pattern_vectors)
 
     def _get_nearby_stars(self, vector, radius):
         """Get star indices within radius radians of the vector."""
