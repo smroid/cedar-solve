@@ -1021,8 +1021,8 @@ class Tetra3():
             pattern_fovs = np.exp2(np.linspace(np.log2(min_fov), np.log2(max_fov), fov_divisions))
         self._logger.info('Generating patterns at FOV scales: ' + str(np.rad2deg(pattern_fovs)))
 
-        # List of patterns found, to be populated across all FOVs.
-        pattern_list = []
+        # Set of patterns found, to be populated across all FOVs.
+        pattern_list = set()
         for pattern_fov in reversed(pattern_fovs):
             keep_at_fov = np.full(num_entries, False)
             if fov_divisions == 1:
@@ -1105,18 +1105,15 @@ class Tetra3():
                         total_pattern_avg_mag += total_mag / len(pattern)
                         pattern_index_list = list(pattern_index[i] for i in pattern)
                         pattern_index_list.sort()
-                        pattern_list.append(pattern_index_list)
+                        # Because 'pattern_list' is a set, if 'pattern_index_list'
+                        # was already added at a previous FOV, we won't add it again.
+                        pattern_list.add(tuple(pattern_index_list))
                         if len(pattern_list) % 1000000 == 0:
                             self._logger.info('Generated %s patterns so far.' % len(pattern_list))
             self._logger.debug('neighbors per star %s; patterns per star %s; avg pattern mag %s' %
                                (total_neighbors / num_pattern_stars,
                                 total_patterns / num_pattern_stars,
                                 total_pattern_avg_mag / total_patterns))
-        # Remove duplicates, if any. These can arise when the same pattern is added
-        # at two FOV scales.
-        pattern_list.sort()
-        pattern_list = [elem for i, elem in enumerate(pattern_list)
-                        if i == 0 or pattern_list[i-1] != elem]
         self._logger.info('Found %s patterns in total.' % len(pattern_list))
 
         # Repeat process, add in missing stars for verification task
@@ -1137,7 +1134,7 @@ class Tetra3():
         # Trim down star table and update indexing for pattern stars
         star_table = star_table[keep_for_verifying, :]
         pattern_index = (np.cumsum(keep_for_verifying)-1)
-        pattern_list = pattern_index[np.array(pattern_list)].tolist()
+        pattern_list = pattern_index[np.array(list(pattern_list))].tolist()
         # Trim catalogue ID to match
         if star_catalog in ('bsc5', 'hip_main'):
             star_catID = star_catID[keep_for_verifying]
