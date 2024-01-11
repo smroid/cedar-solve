@@ -90,6 +90,7 @@ Original Tetra license notice:
 from pathlib import Path
 import csv
 import logging
+import math
 import itertools
 from time import perf_counter as precision_timestamp
 from datetime import datetime
@@ -107,6 +108,9 @@ from scipy.spatial import KDTree
 from scipy.spatial.distance import pdist, cdist
 
 from PIL import Image, ImageDraw
+
+# Local imports.
+from breadth_first_combinations import breadth_first_combinations
 
 _MAGIC_RAND = np.uint64(2654435761)
 _supported_databases = ('bsc5', 'hip_main', 'tyc_main')
@@ -174,24 +178,21 @@ def _compute_vectors(centroids, size, fov):
     star_vectors = star_vectors / norm(star_vectors, axis=1)[:, None]
     return star_vectors
 
-def _compute_centroids(vectors, size, fov, trim=True):
+def _compute_centroids(vectors, size, fov):
     """Get (undistorted) centroids from a set of (derotated) unit vectors
     vectors: Nx3 of (i,j,k) where i is boresight, j is x (horizontal)
     size: (height, width) in pixels.
     fov: horizontal field of view in radians.
-    trim: only keep ones within the field of view, also returns list of indices kept
+    We only keep ones within the field of view, also returns list of indices kept
     """
     (height, width) = size[:2]
     scale_factor = -width/2/np.tan(fov/2)
     centroids = scale_factor*vectors[:, 2:0:-1]/vectors[:, [0]]
     centroids += [height/2, width/2]
-    if not trim:
-        return centroids
-    else:
-        keep = np.flatnonzero(np.logical_and(
-            np.all(centroids > [0, 0], axis=1),
-            np.all(centroids < [height, width], axis=1)))
-        return (centroids[keep, :], keep)
+    keep = np.flatnonzero(np.logical_and(
+        np.all(centroids > [0, 0], axis=1),
+        np.all(centroids < [height, width], axis=1)))
+    return (centroids[keep, :], keep)
 
 def _undistort_centroids(centroids, size, k):
     """Apply r_u = r_d(1 - k'*r_d^2)/(1 - k) undistortion, where k'=k*(2/width)^2,
@@ -250,7 +251,7 @@ def _find_rotation_matrix(image_vectors, catalog_vectors):
     return np.dot(U, V)
 
 def _find_centroid_matches(image_centroids, catalog_centroids, r):
-    """Find matching pairs, unique and within radius r
+    """Find matching pairs, unique and within radius r.
     image_centroids: Nx2 (y, x) in pixels
     catalog_centroids: Mx2 (y, x) in pixels
     r: radius in pixels
@@ -788,7 +789,6 @@ class Tetra3():
 
         assert catalog_file_full_pathname.exists(), 'No star catalogue found at ' \
                                                     + str(catalog_file_full_pathname)
-
         # Calculate number of star catalog entries:
         if star_catalog == 'bsc5':
             # See http://tdc-www.harvard.edu/catalogs/catalogsb.html
@@ -1153,11 +1153,12 @@ class Tetra3():
             pattern_catalog = np.zeros((catalog_length, PATTERN_SIZE), dtype=np.uint16)
         else:
             pattern_catalog = np.zeros((catalog_length, PATTERN_SIZE), dtype=np.uint32)
-        self._logger.info('Catalog size ' + str(pattern_catalog.shape) + ' and type ' + str(pattern_catalog.dtype) + '.')
+        self._logger.info('Catalog size %s and type %s.' %
+                          (pattern_catalog.shape, pattern_catalog.dtype))
 
         if save_largest_edge:
             pattern_largest_edge = np.zeros(catalog_length, dtype=np.float16)
-            self._logger.info('Storing largest edges as type ' + str(pattern_largest_edge.dtype))
+            self._logger.info('Storing largest edges as type %s' % pattern_largest_edge.dtype)
 
         # Gather collision information.
         pattern_hashes_seen = set()
@@ -1248,16 +1249,16 @@ class Tetra3():
             self._logger.info('Skipping database file generation.')
 
     def solve_from_image(self, image, fov_estimate=None, fov_max_error=None,
-                         pattern_checking_stars=8, match_radius=.01, match_threshold=1e-3,
-                         solve_timeout=None, target_pixel=None, distortion=0,
+                         pattern_checking_stars=None, match_radius=.01, match_threshold=1e-3,
+                         solve_timeout=5000, target_pixel=None, distortion=0,
                          return_matches=False, return_visual=False, match_max_error=None,
                          **kwargs):
         """Solve for the sky location of an image.
 
         Star locations (centroids) are found using :meth:`tetra3.get_centroids_from_image` and
-        keyword arguments are passed along to this method. Every combination of the
-        `pattern_checking_stars` (default 8) brightest stars found is checked against the database
-        before giving up.
+        keyword arguments are passed along to this method. Every 4-star combination of the
+        found stars found is checked against the database before giving up (or the `solve_timeout`
+        is reached).
 
         Example:
             ::
@@ -1273,14 +1274,12 @@ class Tetra3():
                 degrees.
             fov_max_error (float, optional): Maximum difference in field of view from the estimate
                 allowed for a match in degrees.
-            pattern_checking_stars (int, optional): Number of stars used to create possible
-                patterns to look up in database.
             match_radius (float, optional): Maximum distance to a star to be considered a match
                 as a fraction of the image field of view.
             match_threshold (float, optional): Maximum allowed false-positive probability to accept
                 a tested pattern a valid match. Default 1e-3. NEW: Corrected for the database size.
             solve_timeout (float, optional): Timeout in milliseconds after which the solver will
-                give up on matching patterns. Defaults to None.
+                give up on matching patterns. Defaults to 5000 (5 seconds).
             target_pixel (numpy.ndarray, optional): Pixel coordinates to return RA/Dec for in
                 addition to the default (the centre of the image). Size (N,2) where each row is the
                 (y, x) coordinate measured from top left corner of the image. Defaults to None.
@@ -1294,6 +1293,7 @@ class Tetra3():
                 the solution.
             match_max_error (float, optional): Maximum difference allowed in pattern for a match.
                 Default is None, which uses the 'pattern_max_error' value from the database.
+            pattern_checking_stars: No longer meaningful, ignored.
             **kwargs (optional): Other keyword arguments passed to
                 :meth:`tetra3.get_centroids_from_image`.
 
@@ -1334,7 +1334,7 @@ class Tetra3():
         """
         assert self.has_database, 'No database loaded'
         self._logger.debug('Got solve from image with input: ' + str(
-            (image, fov_estimate, fov_max_error, pattern_checking_stars, match_radius,
+            (image, fov_estimate, fov_max_error, match_radius,
              match_threshold, solve_timeout, target_pixel, distortion,
              return_matches, return_visual, match_max_error, kwargs)))
         (width, height) = image.size[:2]
@@ -1353,9 +1353,8 @@ class Tetra3():
         # Run centroid solver, passing arguments along (could clean up with kwargs handler)
         solution = self.solve_from_centroids(
             centroids, (height, width), fov_estimate=fov_estimate, fov_max_error=fov_max_error,
-            pattern_checking_stars=pattern_checking_stars, match_radius=match_radius,
-            match_threshold=match_threshold, solve_timeout=solve_timeout,
-            target_pixel=target_pixel, distortion=distortion,
+            match_radius=match_radius, match_threshold=match_threshold,
+            solve_timeout=solve_timeout, target_pixel=target_pixel, distortion=distortion,
             return_matches=return_matches, return_visual=return_visual,
             match_max_error=match_max_error)
         # Add extraction time to results and return
@@ -1366,17 +1365,20 @@ class Tetra3():
             return solution
 
     def solve_from_centroids(self, star_centroids, size, fov_estimate=None, fov_max_error=None,
-                             pattern_checking_stars=8, match_radius=.01, match_threshold=1e-3,
-                             solve_timeout=None, target_pixel=None, distortion=0,
+                             pattern_checking_stars=None, match_radius=.01, match_threshold=1e-3,
+                             solve_timeout=5000, target_pixel=None, distortion=0,
                              return_matches=False, return_visual=False, match_max_error=None):
         """Solve for the sky location using a list of centroids.
 
-        Use :meth:`tetra3.get_centroids_from_image` or your own centroiding algorithm to find an
-        array of all the stars in your image and pass this result along with the resolution of the
-        image to this method. Every combination of the `pattern_checking_stars` (default 8)
-        brightest stars found is checked against the database before giving up. Since patterns
-        contain four stars, there will be 8 choose 4 (70) patterns tested against the database
-        by default.
+        Use :meth:`tetra3.get_centroids_from_image` or your own centroiding algorithm to
+        find an array of all the stars in your image and pass this result along with the
+        resolution of the image to this method.
+
+        Every 4-star combination of the `star_centroids` found is checked against the
+        database before giving up (or the `solve_timeout` is reached). Since patterns
+        contain four stars, there will be N choose 4 (potentially a very large number!)
+        patterns tested against the database, so it is important to specify a meaningful
+        `solve_timeout`.
 
         Passing an estimated FOV and error bounds yields solutions much faster that letting tetra3
         figure it out.
@@ -1398,14 +1400,12 @@ class Tetra3():
                 degrees. Default None.
             fov_max_error (float, optional): Maximum difference in field of view from the estimate
                 allowed for a match in degrees. Default None.
-            pattern_checking_stars (int, optional): Number of stars used to create possible
-                patterns to look up in database. Default 8.
             match_radius (float, optional): Maximum distance to a star to be considered a match
                 as a fraction of the image field of view. Default 0.01.
             match_threshold (float, optional): Maximum allowed false-positive probability to accept
                 a tested pattern a valid match. Default 1e-3. NEW: Corrected for the database size.
             solve_timeout (float, optional): Timeout in milliseconds after which the solver will
-                give up on matching patterns. Defaults to None.
+                give up on matching patterns. Defaults to 5000 (5 seconds).
             target_pixel (numpy.ndarray, optional): Pixel coordinates to return RA/Dec for in
                 addition to the default (the centre of the image). Size (N,2) where each row is the
                 (y, x) coordinate measured from top left corner of the image. Defaults to None.
@@ -1419,6 +1419,7 @@ class Tetra3():
                 the solution.
             match_max_error (float, optional): Maximum difference allowed in pattern for a match.
                 Default is None, which uses the 'pattern_max_error' value from the database.
+            pattern_checking_stars: No longer meaningful, ignored.
 
         Returns:
             dict: A dictionary with the following keys is returned:
@@ -1459,9 +1460,10 @@ class Tetra3():
         assert self.has_database, 'No database loaded'
         self._logger.debug('Got solve from centroids with input: '
                            + str((len(star_centroids), size, fov_estimate, fov_max_error,
-                                  pattern_checking_stars, match_radius, match_threshold,
+                                  match_radius, match_threshold,
                                   solve_timeout, target_pixel, distortion,
                                   return_matches, return_visual, match_max_error)))
+        num_centroids = len(star_centroids)
         image_centroids = np.asarray(star_centroids)
         if fov_estimate is None:
             # If no FOV given at all, guess middle of the range for a start
@@ -1476,7 +1478,6 @@ class Tetra3():
         match_threshold = float(match_threshold) / num_patterns
         self._logger.debug('Set threshold to: ' + str(match_threshold) + ', have '
                            + str(num_patterns) + ' patterns.')
-        pattern_checking_stars = int(pattern_checking_stars)
         if solve_timeout is not None:
             # Convert to seconds to match timestamp
             solve_timeout = float(solve_timeout) / 1000
@@ -1500,8 +1501,6 @@ class Tetra3():
         # Indices to extract from dot product matrix (above diagonal)
         upper_tri_index = np.triu_indices(p_size, 1)
 
-        image_centroids = image_centroids[:num_stars, :]
-        self._logger.debug('Trimmed centroid input shape to: ' + str(image_centroids.shape))
         t0_solve = precision_timestamp()
 
         # If distortion is not None, we need to do some prep work
@@ -1540,9 +1539,10 @@ class Tetra3():
         prev_pattern_cache_hits = self._pattern_cache_hits
         prev_pattern_cache_misses = self._pattern_cache_misses
 
-        # Try all combinations of p_size of pattern_checking_stars.
-        for image_pattern_indices in itertools.combinations(
-                range(min(len(image_centroids), pattern_checking_stars)), p_size):
+        # Try all `p_size` star combinations chosen from the image centroids, brightest first.
+        self._logger.debug('Checking up to %d image patterns from %d centroids.' %
+                           (math.comb(num_centroids, p_size), num_centroids))
+        for image_pattern_indices in breadth_first_combinations(range(num_centroids), p_size):
             image_pattern_centroids = image_centroids[image_pattern_indices, :]
             # Check if timeout has elapsed, then we must give up
             if solve_timeout is not None:
@@ -1722,17 +1722,19 @@ class Tetra3():
 
                     # Derotate nearby stars and get their (undistorted) centroids using coarse fov
                     nearby_star_vectors_derot = np.dot(rotation_matrix, nearby_star_vectors.T).T
-                    (nearby_star_centroids, kept) = _compute_centroids(nearby_star_vectors_derot, (height, width), fov)
+                    (nearby_star_centroids, kept) = _compute_centroids(nearby_star_vectors_derot,
+                                                                       (height, width), fov)
                     nearby_star_vectors = nearby_star_vectors[kept, :]
                     nearby_star_inds = nearby_star_inds[kept]
-                    # Only keep as many as the centroids, they should ideally both be the num_stars brightest
-                    nearby_star_centroids = nearby_star_centroids[:len(image_centroids)]
-                    nearby_star_vectors = nearby_star_vectors[:len(image_centroids)]
-                    nearby_star_inds = nearby_star_inds[:len(image_centroids)]
+                    # Only keep as many as the centroids.
+                    nearby_star_centroids = nearby_star_centroids[:num_centroids]
+                    nearby_star_vectors = nearby_star_vectors[:num_centroids]
+                    nearby_star_inds = nearby_star_inds[:num_centroids]
 
                     # Match these centroids to the image
-                    matched_stars = _find_centroid_matches(image_centroids_undist, nearby_star_centroids, width*match_radius)
-                    num_extracted_stars = len(image_centroids)
+                    matched_stars = _find_centroid_matches(
+                        image_centroids_undist, nearby_star_centroids, width*match_radius)
+                    num_extracted_stars = num_centroids
                     num_nearby_catalog_stars = len(nearby_star_centroids)
                     num_star_matches = len(matched_stars)
                     self._logger.debug("Number of nearby stars: %d, total matched: %d" \
@@ -1903,8 +1905,9 @@ class Tetra3():
 
                     self._logger.debug(solution_dict)
                     self._logger.debug(
-                        'Evaluated %s image patterns; searched %s pattern hashes; %s for final pattern' %
-                        (image_patterns_evaluated,
+                        'For %d centroids, evaluated %s image patterns; searched %s pattern hashes; %s for final pattern' %
+                        (num_centroids,
+                         image_patterns_evaluated,
                          search_space_explored,
                          search_space_explored_final_pattern))
                     self._logger.debug(
@@ -1917,8 +1920,9 @@ class Tetra3():
         self._logger.debug('FAIL: Did not find a match to the stars! It took '
                            + str(round(t_solve)) + ' ms.')
         self._logger.debug(
-            'Evaluated %s image patterns; searched %s pattern hashes; %s for final pattern' %
-            (image_patterns_evaluated,
+            'For %d centroids, evaluated %s image patterns; searched %s pattern hashes; %s for final pattern' %
+            (num_centroids,
+             image_patterns_evaluated,
              search_space_explored,
              search_space_explored_final_pattern))
         self._logger.debug(
