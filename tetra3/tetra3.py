@@ -1048,7 +1048,7 @@ class Tetra3():
                 pattern_stars_separation = _separation_for_density(
                     pattern_fov, pattern_stars_per_fov)
 
-            self._logger.info('At FOV %s separate pattern stars by %s deg.' %
+            self._logger.info('At FOV %s separate pattern stars by %.2f deg.' %
                               (round(np.rad2deg(pattern_fov), 5),
                                np.rad2deg(pattern_stars_separation)))
             pattern_stars_dist = _distance_from_angle(pattern_stars_separation)
@@ -1091,12 +1091,25 @@ class Tetra3():
             total_neighbors = 0
             total_patterns = 0
             total_pattern_avg_mag = 0
+
+            min_pattern_angle = 3.15  # larger than largest possible pattern star angle
+            max_pattern_angle = 0
+            total_pattern_angle = 0
             for pattern[0] in range(pattern_star_table.shape[0]):
                 num_pattern_stars += 1
                 # Remove star from future consideration
                 available_stars[pattern[0]] = False
-                # Find all neighbours within FOV, keep only those not removed
+
                 vector = pattern_star_table[pattern[0], 2:5]
+                # Find distance of this pattern star to the nearest other pattern star.
+                distances, _ = pattern_kd_tree.query(vector, k=2)
+                assert(distances[0] == 0.0)  # First item is the query pattern star, so distance is 0.
+                pattern_angle = _angle_from_distance(distances[1])
+                min_pattern_angle = min(pattern_angle, min_pattern_angle)
+                max_pattern_angle = max(pattern_angle, max_pattern_angle)
+                total_pattern_angle += pattern_angle
+
+                # Find all neighbours within FOV, keep only those not removed
                 neighbours = pattern_kd_tree.query_ball_point(vector, fov_dist)
                 available = [available_stars[i] for i in neighbours]
                 neighbours = np.compress(available, neighbours)
@@ -1124,10 +1137,15 @@ class Tetra3():
                         pattern_list.add(tuple(pattern_index_list))
                         if len(pattern_list) % 1000000 == 0:
                             self._logger.info('Generated %s patterns so far.' % len(pattern_list))
-            self._logger.debug('neighbors per star %s; patterns per star %s; avg pattern mag %s' %
+            self._logger.debug('neighbors per star %.2f; patterns per star %.2f; avg pattern mag %.2f' %
                                (total_neighbors / num_pattern_stars,
                                 total_patterns / num_pattern_stars,
                                 total_pattern_avg_mag / total_patterns))
+            self._logger.debug('min/avg/max pattern star separation %.2f/%.2f/%.2f deg.' %
+                               (np.rad2deg(min_pattern_angle),
+                                np.rad2deg(total_pattern_angle / num_pattern_stars),
+                                np.rad2deg(max_pattern_angle)))
+
         self._logger.info('Found %s patterns in total.' % len(pattern_list))
 
         # Repeat process, add in missing stars for verification task
