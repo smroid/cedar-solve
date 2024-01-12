@@ -41,7 +41,8 @@ Note:
     <https://cdsarc.u-strasbg.fr/ftp/cats/I/239/> (save the appropriate .dat file). The
     downloaded catalogue must be placed in the tetra3/tetra3 directory.
 
-This is Free and Open-Source Software based on `Tetra` rewritten by Gustav Pettersson at ESA.
+This is Free and Open-Source Software based on `Tetra` rewritten by Gustav Pettersson at ESA,
+with further improvements by Steven Rosenthal.
 
 The original software is due to:
 J. Brown, K. Stubis, and K. Cahoy, "TETRA: Star Identification with Hash Tables",
@@ -272,6 +273,19 @@ def _separation_for_density(fov, stars_per_fov):
     stars_per_fov: desired number of stars in field of view
     """
     return .6 * fov / np.sqrt(stars_per_fov)
+
+def _angle_from_distance(dist):
+    """Given a euclidean distance between two points on the unit sphere,
+    return the center angle (in radians) between the two points.
+    """
+    return 2.0 * np.arcsin(0.5 * dist)
+
+def _distance_from_angle(angle):
+    """Return the euclidean distance between two points on the unit sphere with the
+    given center angle (in radians).
+    """
+    return 2.0 * np.sin(angle / 2.0)
+
 
 class Tetra3():
     """Solve star patterns and manage databases.
@@ -1037,7 +1051,7 @@ class Tetra3():
             self._logger.info('At FOV %s separate pattern stars by %s deg.' %
                               (round(np.rad2deg(pattern_fov), 5),
                                np.rad2deg(pattern_stars_separation)))
-            pattern_stars_dist = 2 * np.sin(pattern_stars_separation/2)
+            pattern_stars_dist = _distance_from_angle(pattern_stars_separation)
             # Loop through all stars in database, create set of of pattern stars
             # Note that each loop just adds stars to the previous version (between old ones)
             # so we can skip all indices already kept
@@ -1068,7 +1082,7 @@ class Tetra3():
             fov_angle = pattern_fov
             if simplify_pattern:
                 fov_angle /= 2
-            fov_dist = 2 * np.sin(fov_angle/2)
+            fov_dist = _distance_from_angle(fov_angle)
             # initialize pattern, which will contain PATTERN_SIZE star ids
             pattern = [None] * PATTERN_SIZE
 
@@ -1119,7 +1133,7 @@ class Tetra3():
         # Repeat process, add in missing stars for verification task
         verification_stars_separation = _separation_for_density(
             min_fov, verification_stars_per_fov)
-        verification_stars_dist = 2 * np.sin(verification_stars_separation/2)
+        verification_stars_dist = _distance_from_angle(verification_stars_separation)
         keep_for_verifying = keep_for_patterns.copy()
         for star_ind in range(1, num_entries):
             vector = all_star_vectors[star_ind, :]
@@ -1176,7 +1190,7 @@ class Tetra3():
             vectors = star_table[pattern, 2:5]
 
             # implement more accurate angle calculation
-            edge_angles_sorted = np.sort(2 * np.arcsin(.5 * pdist(vectors)))
+            edge_angles_sorted = np.sort(_angle_from_distance(pdist(vectors)))
             edge_ratios = edge_angles_sorted[:-1] / edge_angles_sorted[-1]
 
             # convert edge ratio float to pattern hash by binning
@@ -1491,7 +1505,6 @@ class Tetra3():
         # extract height (y) and width (x) of image
         (height, width) = size[:2]
         # Extract relevant database properties
-        num_stars = self._db_props['verification_stars_per_fov']
         p_size = self._db_props['pattern_size']
         p_bins = self._db_props['pattern_bins']
         if match_max_error is None:
@@ -1553,7 +1566,7 @@ class Tetra3():
             if distortion is None or isinstance(distortion, Number):
                 image_pattern_vectors = image_centroids_vectors[image_pattern_indices, :]
                 # Calculate what the edge ratios are and broaden by p_max_err tolerance
-                edge_angles_sorted = np.sort(2 * np.arcsin(.5 * pdist(image_pattern_vectors)))
+                edge_angles_sorted = np.sort(_angle_from_distance(pdist(image_pattern_vectors)))
                 image_pattern_largest_edge = edge_angles_sorted[-1]
                 image_pattern = edge_angles_sorted[:-1] / image_pattern_largest_edge
                 image_pattern_edge_ratio_min = image_pattern - p_max_err
@@ -1565,7 +1578,7 @@ class Tetra3():
                 for i in range(len(distortion_range)):
                     image_pattern_vectors = _compute_vectors(
                         image_centroids_preundist[i, image_pattern_indices], (height, width), fov_initial)
-                    preundist_edge_angles_sorted = np.sort(2 * np.arcsin(.5 * pdist(image_pattern_vectors)))
+                    preundist_edge_angles_sorted = np.sort(_angle_from_distance(pdist(image_pattern_vectors)))
                     image_pattern_largest_edge = preundist_edge_angles_sorted[-1]
                     image_pattern_edge_ratio_preundist[i, :] = \
                         preundist_edge_angles_sorted[:-1] / image_pattern_largest_edge
@@ -1769,8 +1782,8 @@ class Tetra3():
                     if distortion is None:
                         # Compare mutual angles in catalogue to those with current
                         # FOV estimate in order to scale accurately for fine FOV
-                        angles_camera = 2 * np.arcsin(0.5 * pdist(matched_image_vectors))
-                        angles_catalogue = 2 * np.arcsin(0.5 * pdist(matched_catalog_vectors))
+                        angles_camera = _angle_from_distance(pdist(matched_image_vectors))
+                        angles_catalogue = _angle_from_distance(pdist(matched_catalog_vectors))
                         fov *= np.mean(angles_catalogue / angles_camera)
                         k = None
                         matched_image_centroids_undist = matched_image_centroids
@@ -1809,7 +1822,7 @@ class Tetra3():
 
                     # Calculate residual angles with more accurate formula
                     distance = norm(final_match_vectors - matched_catalog_vectors, axis=1)
-                    angle = 2 * np.arcsin(.5 * distance)
+                    angle = _angle_from_distance(distance)
                     residual = np.rad2deg(np.sqrt(np.mean(angle**2))) * 3600
 
                     # Solved in this time
@@ -1964,7 +1977,7 @@ class Tetra3():
         # this is a bit manual, I could not see a faster way
         arr1 = np.take(catalog_pattern_vectors, upper_tri_index[0], axis=1)
         arr2 = np.take(catalog_pattern_vectors, upper_tri_index[1], axis=1)
-        catalog_pattern_edges = np.sort(2 * np.arcsin(.5 * norm(arr1 - arr2, axis=-1)))
+        catalog_pattern_edges = np.sort(_angle_from_distance(norm(arr1 - arr2, axis=-1)))
 
         self._pattern_cache[hash_index] = (catalog_pattern_edges, catalog_pattern_vectors)
         return (catalog_pattern_edges, catalog_pattern_vectors)
@@ -1972,7 +1985,7 @@ class Tetra3():
     def _get_nearby_stars(self, vector, radius):
         """Get star indices within radius radians of the vector."""
         # Stars must be within this cartesian cube
-        max_dist = 2*np.sin(radius/2)
+        max_dist = _distance_from_angle(radius)
         range_x = vector[0] + np.array([-max_dist, max_dist])
         range_y = vector[1] + np.array([-max_dist, max_dist])
         range_z = vector[2] + np.array([-max_dist, max_dist])
