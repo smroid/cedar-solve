@@ -13,7 +13,8 @@ EXAMPLES_DIR = Path(__file__).parent
 import tetra3
 
 # Create instance and load the default database, built for 30 to 10 degree field of view.
-# Pass `load_database=None` to not load a database, or to load your own.
+# Pass `load_database=None` to not load a database (e.g. to build your own; see
+# generate_database.py example script).
 t3 = tetra3.Tetra3(load_database='default_database')
 
 # Path where images are
@@ -27,6 +28,5 @@ for impath in path.glob('*'):
         # aspect of the solution is centroiding (detecting the stars in the image).
         # You can use `return_images` to get a second return value to check the
         # centroiding process, the key `final_centroids` is especially useful.
-        solution = t3.solve_from_image(img, fov_estimate=11, distortion=0,
-                                       match_radius=.01)
+        solution = t3.solve_from_image(img, fov_estimate=11)
     print('Solution: ' + str(solution))
