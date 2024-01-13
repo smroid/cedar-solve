@@ -614,6 +614,232 @@ class Tetra3():
 
         np.savez_compressed(path, **to_save)
 
+    def _load_catalog(self, star_catalog, star_max_magnitude, range_ra, range_dec, epoch_proper_motion):
+        """Loads the star catalog and returns at tuple of:
+        star_table: an array of [ra, dec, 0, 0, 0, mag]
+        star_catID: array of catalog IDs for the entries in star_table
+        epoch_equinox: the epoch of the star catalog's celestial coordinate system.
+        """
+        catalog_file_full_pathname = Path(__file__).parent / star_catalog
+        # Add .dat suffix for hip and tyc if not present
+        if star_catalog in ('hip_main', 'tyc_main') and not catalog_file_full_pathname.suffix:
+            catalog_file_full_pathname = catalog_file_full_pathname.with_suffix('.dat')
+
+        assert catalog_file_full_pathname.exists(), 'No star catalogue found at ' \
+                                                    + str(catalog_file_full_pathname)
+        # Calculate number of star catalog entries:
+        if star_catalog == 'bsc5':
+            # See http://tdc-www.harvard.edu/catalogs/catalogsb.html
+            bsc5_header_type = [('STAR0', np.int32), ('STAR1', np.int32),
+                                ('STARN', np.int32), ('STNUM', np.int32),
+                                ('MPROP', np.int32), ('NMAG', np.int32),
+                                ('NBENT', np.int32)]
+            reader = np.fromfile(catalog_file_full_pathname, dtype=bsc5_header_type, count=1)
+            entry = reader[0]
+            num_entries = entry[2]
+            header_length = reader.itemsize
+            if num_entries > 0:
+                epoch_equinox = 1950
+                pm_origin = 1950  # this is an assumption, not specified in bsc5 docs
+            else:
+                num_entries = -num_entries
+                epoch_equinox = 2000
+                pm_origin = 2000  # this is an assumption, not specified in bsc5 docs
+            # Check that the catalogue version has the data we need
+            stnum = entry[3]
+            if stnum != 1:
+                self._logger.warning('Catalogue %s has unexpected "stnum" header value: %s' %
+                                     (star_catalog, stnum))
+            mprop = entry[4]
+            if mprop != 1:
+                self._logger.warning('Catalogue %s has unexpected "mprop" header value: %s' %
+                                     (star_catalog, mprop))
+            nmag = entry[5]
+            if nmag != 1:
+                self._logger.warning('Catalogue %s has unexpected "nmag" header value: %s' %
+                                     (star_catalog, nmag))
+            nbent = entry[6]
+            if nbent != 32:
+                self._logger.warning('Catalogue %s has unexpected "nbent" header value: %s' %
+                                     (star_catalog, nbent))
+        elif star_catalog in ('hip_main', 'tyc_main'):
+            num_entries = sum(1 for _ in open(catalog_file_full_pathname))
+            epoch_equinox = 2000
+            pm_origin = 1991.25
+
+        self._logger.info('Loading catalogue %s with %s star entries.' %
+                          (star_catalog, num_entries))
+
+        if epoch_proper_motion is None:
+            # If pm propagation was disabled, set end date to origin
+            epoch_proper_motion = pm_origin
+            self._logger.info('Using catalog RA/Dec %s epoch; not propagating proper motions from %s.' %
+                              (epoch_equinox, pm_origin))
+        else:
+            self._logger.info('Using catalog RA/Dec %s epoch; propagating proper motions from %s to %s.' %
+                              (epoch_equinox, pm_origin, epoch_proper_motion))
+
+        # Preallocate star table: elements are [ra, dec, x, y, z, mag].
+        star_table = np.zeros((num_entries, 6), dtype=np.float32)
+        # Preallocate ID table
+        if star_catalog == 'bsc5':
+            star_catID = np.zeros(num_entries, dtype=np.uint16)
+        elif star_catalog == 'hip_main':
+            star_catID = np.zeros(num_entries, dtype=np.uint32)
+        else: # is tyc_main
+            star_catID = np.zeros((num_entries, 3), dtype=np.uint16)
+
+        # Read magnitude, RA, and Dec from star catalog:
+        if star_catalog == 'bsc5':
+            bsc5_data_type = [('ID', np.float32), ('RA', np.float64),
+                              ('Dec', np.float64), ('type', np.int16),
+                              ('mag', np.int16), ('RA_pm', np.float32), ('Dec_PM', np.float32)]
+            with open(catalog_file_full_pathname, 'rb') as star_catalog_file:
+                star_catalog_file.seek(header_length)  # skip header
+                reader = np.fromfile(star_catalog_file, dtype=bsc5_data_type, count=num_entries)
+            for (i, entry) in enumerate(reader):
+                mag = entry[4]/100
+                if star_max_magnitude is not None and mag > star_max_magnitude:
+                    continue
+                # RA/Dec in radians at epoch proper motion start.
+                alpha = float(entry[1])
+                delta = float(entry[2])
+                cos_delta = np.cos(delta)
+
+                # Pick up proper motion terms. See notes for hip_main and tyc_main below.
+                # Radians per year.
+                mu_alpha_cos_delta = float(entry[5])
+                mu_delta = float(entry[6])
+
+                # See notes below.
+                if cos_delta > 0.1:
+                    mu_alpha = mu_alpha_cos_delta / cos_delta
+                else:
+                    mu_alpha = 0
+                    mu_delta = 0
+
+                ra  = alpha + mu_alpha * (epoch_proper_motion - pm_origin)
+                dec = delta + mu_delta * (epoch_proper_motion - pm_origin)
+                star_table[i,:] = ([ra, dec, 0, 0, 0, mag])
+                star_catID[i] = np.uint16(entry[0])
+        elif star_catalog in ('hip_main', 'tyc_main'):
+            # The Hipparcos and Tycho catalogs uses International Celestial
+            # Reference System (ICRS) which is essentially J2000. See
+            # https://cdsarc.u-strasbg.fr/ftp/cats/I/239/version_cd/docs/vol1/sect1_02.pdf
+            # section 1.2.1 for details.
+            with open(catalog_file_full_pathname, 'r') as star_catalog_file:
+                reader = csv.reader(star_catalog_file, delimiter='|')
+                incomplete_entries = 0
+                for (i, entry) in enumerate(reader):
+                    # Skip this entry if mag, ra, or dec are empty.
+                    if entry[5].isspace() or entry[8].isspace() or entry[9].isspace():
+                        incomplete_entries += 1
+                        continue
+                    # If propagating, skip if proper motions are empty.
+                    if epoch_proper_motion != pm_origin \
+                            and (entry[12].isspace() or entry[13].isspace()):
+                        incomplete_entries += 1
+                        continue
+                    mag = float(entry[5])
+                    if star_max_magnitude is not None and mag > star_max_magnitude:
+                        continue
+                    # RA/Dec in degrees at 1991.25 proper motion start.
+                    alpha = float(entry[8])
+                    delta = float(entry[9])
+                    cos_delta = np.cos(np.deg2rad(delta))
+
+                    mu_alpha = 0
+                    mu_delta = 0
+                    if epoch_proper_motion != pm_origin:
+                        # Pick up proper motion terms. Note that the pmRA field is
+                        # "proper motion in right ascension"; see
+                        # https://en.wikipedia.org/wiki/Proper_motion; see also section
+                        # 1.2.5 in the cdsarc.u-strasbg document cited above.
+
+                        # The 1000/60/60 term converts milliarcseconds per year to
+                        # degrees per year.
+                        mu_alpha_cos_delta = float(entry[12])/1000/60/60
+                        mu_delta = float(entry[13])/1000/60/60
+
+                        # Divide the pmRA field by cos_delta to recover the RA proper
+                        # motion rate. Note however that near the poles (delta near plus
+                        # or minus 90 degrees) the cos_delta term goes to zero so dividing
+                        # by cos_delta is problematic there.
+                        # Section 1.2.9 of the cdsarc.u-strasbg document cited above
+                        # outlines a change of coordinate system that can overcome
+                        # this problem; we simply punt on proper motion near the poles.
+                        if cos_delta > 0.1:
+                            mu_alpha = mu_alpha_cos_delta / cos_delta
+                        else:
+                            # abs(dec) > ~84 degrees. Ignore proper motion.
+                            mu_alpha = 0
+                            mu_delta = 0
+
+                    ra  = np.deg2rad(alpha + mu_alpha * (epoch_proper_motion - pm_origin))
+                    dec = np.deg2rad(delta + mu_delta * (epoch_proper_motion - pm_origin))
+                    star_table[i,:] = ([ra, dec, 0, 0, 0, mag])
+                    # Find ID, depends on the database
+                    if star_catalog == 'hip_main':
+                        star_catID[i] = np.uint32(entry[1])
+                    else: # is tyc_main
+                        star_catID[i, :] = [np.uint16(x) for x in entry[1].split()]
+
+                if incomplete_entries:
+                    self._logger.info('Skipped %i incomplete entries.' % incomplete_entries)
+
+        # Remove entries in which RA and Dec are both zero
+        # (i.e. keep entries in which either RA or Dec is non-zero)
+        kept = np.logical_or(star_table[:, 0] != 0, star_table[:, 1] != 0)
+        star_table = star_table[kept, :]
+        brightness_ii = np.argsort(star_table[:, 5])
+        star_table = star_table[brightness_ii, :]  # Sort by brightness
+        num_entries = star_table.shape[0]
+        # Trim and order catalogue ID array to match
+        if star_catalog in ('bsc5', 'hip_main'):
+            star_catID = star_catID[kept][brightness_ii]
+        else:
+            star_catID = star_catID[kept, :][brightness_ii, :]
+
+        if star_max_magnitude is None:
+            self._logger.info('Loaded %d stars' % num_entries)
+        else:
+            self._logger.info('Loaded %d stars with magnitude below %.1f.' %
+                              (num_entries, star_max_magnitude))
+
+        # If desired, clip out only a specific range of ra and/or dec for a partial coverage database
+        if range_ra is not None:
+            range_ra = np.deg2rad(range_ra)
+            if range_ra[0] < range_ra[1]: # Range does not cross 360deg discontinuity
+                kept = np.logical_and(star_table[:, 0] > range_ra[0], star_table[:, 0] < range_ra[1])
+            else:
+                kept = np.logical_or(star_table[:, 0] > range_ra[0], star_table[:, 0] < range_ra[1])
+            star_table = star_table[kept, :]
+            num_entries = star_table.shape[0]
+            # Trim down catalogue ID to match
+            if star_catalog in ('bsc5', 'hip_main'):
+                star_catID = star_catID[kept]
+            else:
+                star_catID = star_catID[kept, :]
+            self._logger.info('Limited to RA range ' + str(np.rad2deg(range_ra)) + ', keeping ' \
+                + str(num_entries) + ' stars.')
+        if range_dec is not None:
+            range_dec = np.deg2rad(range_dec)
+            if range_dec[0] < range_dec[1]: # Range does not cross +/-90deg discontinuity
+                kept = np.logical_and(star_table[:, 1] > range_dec[0], star_table[:, 1] < range_dec[1])
+            else:
+                kept = np.logical_or(star_table[:, 1] > range_dec[0], star_table[:, 1] < range_dec[1])
+            star_table = star_table[kept, :]
+            num_entries = star_table.shape[0]
+            # Trim down catalogue ID to match
+            if star_catalog in ('bsc5', 'hip_main'):
+                star_catID = star_catID[kept]
+            else:
+                star_catID = star_catID[kept, :]
+            self._logger.info('Limited to DEC range ' + str(np.rad2deg(range_dec)) + ', keeping ' \
+                + str(num_entries) + ' stars.')
+
+        return (star_table, star_catID, epoch_equinox)
+
     def generate_database(self, max_fov, min_fov=None, save_as=None,
                           star_catalog='hip_main', pattern_stars_per_fov=10,
                           verification_stars_per_fov=30, star_max_magnitude=7,
@@ -796,219 +1022,9 @@ class Tetra3():
         else:
             raise ValueError('epoch_proper_motion value %s is forbidden' % epoch_proper_motion)
 
-        catalog_file_full_pathname = Path(__file__).parent / star_catalog
-        # Add .dat suffix for hip and tyc if not present
-        if star_catalog in ('hip_main', 'tyc_main') and not catalog_file_full_pathname.suffix:
-            catalog_file_full_pathname = catalog_file_full_pathname.with_suffix('.dat')
-
-        assert catalog_file_full_pathname.exists(), 'No star catalogue found at ' \
-                                                    + str(catalog_file_full_pathname)
-        # Calculate number of star catalog entries:
-        if star_catalog == 'bsc5':
-            # See http://tdc-www.harvard.edu/catalogs/catalogsb.html
-            bsc5_header_type = [('STAR0', np.int32), ('STAR1', np.int32),
-                                ('STARN', np.int32), ('STNUM', np.int32),
-                                ('MPROP', np.int32), ('NMAG', np.int32),
-                                ('NBENT', np.int32)]
-            reader = np.fromfile(catalog_file_full_pathname, dtype=bsc5_header_type, count=1)
-            entry = reader[0]
-            num_entries = entry[2]
-            header_length = reader.itemsize
-            if num_entries > 0:
-                epoch_equinox = 1950
-                pm_origin = 1950  # this is an assumption, not specified in bsc5 docs
-            else:
-                num_entries = -num_entries
-                epoch_equinox = 2000
-                pm_origin = 2000  # this is an assumption, not specified in bsc5 docs
-            # Check that the catalogue version has the data we need
-            stnum = entry[3]
-            if stnum != 1:
-                self._logger.warning('Catalogue %s has unexpected "stnum" header value: %s' %
-                                     (star_catalog, stnum))
-            mprop = entry[4]
-            if mprop != 1:
-                self._logger.warning('Catalogue %s has unexpected "mprop" header value: %s' %
-                                     (star_catalog, mprop))
-            nmag = entry[5]
-            if nmag != 1:
-                self._logger.warning('Catalogue %s has unexpected "nmag" header value: %s' %
-                                     (star_catalog, nmag))
-            nbent = entry[6]
-            if nbent != 32:
-                self._logger.warning('Catalogue %s has unexpected "nbent" header value: %s' %
-                                     (star_catalog, nbent))
-        elif star_catalog in ('hip_main', 'tyc_main'):
-            num_entries = sum(1 for _ in open(catalog_file_full_pathname))
-            epoch_equinox = 2000
-            pm_origin = 1991.25
-
-        self._logger.info('Loading catalogue %s with %s star entries.' %
-                          (star_catalog, num_entries))
-
-        if epoch_proper_motion is None:
-            # If pm propagation was disabled, set end date to origin
-            epoch_proper_motion = pm_origin
-            self._logger.info('Using catalog RA/Dec %s epoch; not propagating proper motions from %s.' %
-                              (epoch_equinox, pm_origin))
-        else:
-            self._logger.info('Using catalog RA/Dec %s epoch; propagating proper motions from %s to %s.' %
-                              (epoch_equinox, pm_origin, epoch_proper_motion))
-
-        # Preallocate star table: elements are [ra, dec, x, y, z, mag].
-        star_table = np.zeros((num_entries, 6), dtype=np.float32)
-        # Preallocate ID table
-        if star_catalog == 'bsc5':
-            star_catID = np.zeros(num_entries, dtype=np.uint16)
-        elif star_catalog == 'hip_main':
-            star_catID = np.zeros(num_entries, dtype=np.uint32)
-        else: # is tyc_main
-            star_catID = np.zeros((num_entries, 3), dtype=np.uint16)
-
-        # Read magnitude, RA, and Dec from star catalog:
-        if star_catalog == 'bsc5':
-            bsc5_data_type = [('ID', np.float32), ('RA', np.float64),
-                              ('Dec', np.float64), ('type', np.int16),
-                              ('mag', np.int16), ('RA_pm', np.float32), ('Dec_PM', np.float32)]
-            with open(catalog_file_full_pathname, 'rb') as star_catalog_file:
-                star_catalog_file.seek(header_length)  # skip header
-                reader = np.fromfile(star_catalog_file, dtype=bsc5_data_type, count=num_entries)
-            for (i, entry) in enumerate(reader):
-                mag = entry[4]/100
-                if mag > star_max_magnitude:
-                    continue
-                # RA/Dec in radians at epoch proper motion start.
-                alpha = float(entry[1])
-                delta = float(entry[2])
-                cos_delta = np.cos(delta)
-
-                # Pick up proper motion terms. See notes for hip_main and tyc_main below.
-                # Radians per year.
-                mu_alpha_cos_delta = float(entry[5])
-                mu_delta = float(entry[6])
-
-                # See notes below.
-                if cos_delta > 0.1:
-                    mu_alpha = mu_alpha_cos_delta / cos_delta
-                else:
-                    mu_alpha = 0
-                    mu_delta = 0
-
-                ra  = alpha + mu_alpha * (epoch_proper_motion - pm_origin)
-                dec = delta + mu_delta * (epoch_proper_motion - pm_origin)
-                star_table[i,:] = ([ra, dec, 0, 0, 0, mag])
-                star_catID[i] = np.uint16(entry[0])
-        elif star_catalog in ('hip_main', 'tyc_main'):
-            # The Hipparcos and Tycho catalogs uses International Celestial
-            # Reference System (ICRS) which is essentially J2000. See
-            # https://cdsarc.u-strasbg.fr/ftp/cats/I/239/version_cd/docs/vol1/sect1_02.pdf
-            # section 1.2.1 for details.
-            with open(catalog_file_full_pathname, 'r') as star_catalog_file:
-                reader = csv.reader(star_catalog_file, delimiter='|')
-                incomplete_entries = 0
-                for (i, entry) in enumerate(reader):
-                    # Skip this entry if mag, ra, or dec are empty.
-                    if entry[5].isspace() or entry[8].isspace() or entry[9].isspace():
-                        incomplete_entries += 1
-                        continue
-                    # If propagating, skip if proper motions are empty.
-                    if epoch_proper_motion != pm_origin \
-                            and (entry[12].isspace() or entry[13].isspace()):
-                        incomplete_entries += 1
-                        continue
-                    mag = float(entry[5])
-                    if mag > star_max_magnitude:
-                        continue
-                    # RA/Dec in degrees at 1991.25 proper motion start.
-                    alpha = float(entry[8])
-                    delta = float(entry[9])
-                    cos_delta = np.cos(np.deg2rad(delta))
-
-                    mu_alpha = 0
-                    mu_delta = 0
-                    if epoch_proper_motion != pm_origin:
-                        # Pick up proper motion terms. Note that the pmRA field is
-                        # "proper motion in right ascension"; see
-                        # https://en.wikipedia.org/wiki/Proper_motion; see also section
-                        # 1.2.5 in the cdsarc.u-strasbg document cited above.
-
-                        # The 1000/60/60 term converts milliarcseconds per year to
-                        # degrees per year.
-                        mu_alpha_cos_delta = float(entry[12])/1000/60/60
-                        mu_delta = float(entry[13])/1000/60/60
-
-                        # Divide the pmRA field by cos_delta to recover the RA proper
-                        # motion rate. Note however that near the poles (delta near plus
-                        # or minus 90 degrees) the cos_delta term goes to zero so dividing
-                        # by cos_delta is problematic there.
-                        # Section 1.2.9 of the cdsarc.u-strasbg document cited above
-                        # outlines a change of coordinate system that can overcome
-                        # this problem; we simply punt on proper motion near the poles.
-                        if cos_delta > 0.1:
-                            mu_alpha = mu_alpha_cos_delta / cos_delta
-                        else:
-                            # abs(dec) > ~84 degrees. Ignore proper motion.
-                            mu_alpha = 0
-                            mu_delta = 0
-
-                    ra  = np.deg2rad(alpha + mu_alpha * (epoch_proper_motion - pm_origin))
-                    dec = np.deg2rad(delta + mu_delta * (epoch_proper_motion - pm_origin))
-                    star_table[i,:] = ([ra, dec, 0, 0, 0, mag])
-                    # Find ID, depends on the database
-                    if star_catalog == 'hip_main':
-                        star_catID[i] = np.uint32(entry[1])
-                    else: # is tyc_main
-                        star_catID[i, :] = [np.uint16(x) for x in entry[1].split()]
-
-                if incomplete_entries:
-                    self._logger.info('Skipped %i incomplete entries.' % incomplete_entries)
-
-        # Remove entries in which RA and Dec are both zero
-        # (i.e. keep entries in which either RA or Dec is non-zero)
-        kept = np.logical_or(star_table[:, 0]!=0, star_table[:, 1]!=0)
-        star_table = star_table[kept, :]
-        brightness_ii = np.argsort(star_table[:, -1])
-        star_table = star_table[brightness_ii, :]  # Sort by brightness
+        star_table, star_catID, epoch_equinox = self._load_catalog(
+            star_catalog, star_max_magnitude, range_ra, range_dec, epoch_proper_motion)
         num_entries = star_table.shape[0]
-        # Trim and order catalogue ID array to match
-        if star_catalog in ('bsc5', 'hip_main'):
-            star_catID = star_catID[kept][brightness_ii]
-        else:
-            star_catID = star_catID[kept, :][brightness_ii, :]
-        self._logger.info('Loaded ' + str(num_entries) + ' stars with magnitude below ' \
-            + str(star_max_magnitude) + '.')
-
-        # If desired, clip out only a specific range of ra and/or dec for a partial coverage database
-        if range_ra is not None:
-            range_ra = np.deg2rad(range_ra)
-            if range_ra[0] < range_ra[1]: # Range does not cross 360deg discontinuity
-                kept = np.logical_and(star_table[:, 0] > range_ra[0], star_table[:, 0] < range_ra[1])
-            else:
-                kept = np.logical_or(star_table[:, 0] > range_ra[0], star_table[:, 0] < range_ra[1])
-            star_table = star_table[kept, :]
-            num_entries = star_table.shape[0]
-            # Trim down catalogue ID to match
-            if star_catalog in ('bsc5', 'hip_main'):
-                star_catID = star_catID[kept]
-            else:
-                star_catID = star_catID[kept, :]
-            self._logger.info('Limited to RA range ' + str(np.rad2deg(range_ra)) + ', keeping ' \
-                + str(num_entries) + ' stars.')
-        if range_dec is not None:
-            range_dec = np.deg2rad(range_dec)
-            if range_dec[0] < range_dec[1]: # Range does not cross +/-90deg discontinuity
-                kept = np.logical_and(star_table[:, 1] > range_dec[0], star_table[:, 1] < range_dec[1])
-            else:
-                kept = np.logical_or(star_table[:, 1] > range_dec[0], star_table[:, 1] < range_dec[1])
-            star_table = star_table[kept, :]
-            num_entries = star_table.shape[0]
-            # Trim down catalogue ID to match
-            if star_catalog in ('bsc5', 'hip_main'):
-                star_catID = star_catID[kept]
-            else:
-                star_catID = star_catID[kept, :]
-            self._logger.info('Limited to DEC range ' + str(np.rad2deg(range_dec)) + ', keeping ' \
-                + str(num_entries) + ' stars.')
 
         # Calculate star direction vectors:
         for i in range(0, num_entries):
