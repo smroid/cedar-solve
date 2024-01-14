@@ -847,7 +847,7 @@ class Tetra3():
                           min_pattern_star_separation=.05, star_max_magnitude=None,
                           pattern_max_error=.002, simplify_pattern=True,
                           range_ra=None, range_dec=None,
-                          presort_patterns=True, save_largest_edge=False,
+                          presort_patterns=True, save_largest_edge=True,
                           multiscale_step=1.5, epoch_proper_motion='now',
                           pattern_stars_per_fov=None, verification_stars_per_fov=None):
         """Create a database and optionally save it to file.
@@ -987,7 +987,7 @@ class Tetra3():
             presort_patterns (bool, optional): If True (the default), all star patterns will be
                 sorted during database generation to avoid doing it when solving. Makes database
                 generation slower but the solver faster.
-            save_largest_edge (bool, optional): If True (default False), the absolute size of each
+            save_largest_edge (bool, optional): If True (default), the absolute size of each
                 pattern is stored (via its largest edge angle) in a separate array. This makes the
                 database larger but the solver faster.
             multiscale_step (float, optional): Determines the largest ratio between subsequent FOVs
@@ -1803,7 +1803,8 @@ class Tetra3():
                 hash_index = _pattern_hash_to_index(pattern_hash, p_bins, self.pattern_catalog.shape[0])
 
                 (catalog_pattern_edges, all_catalog_pattern_vectors) = \
-                    self._get_all_patterns_for_index(hash_index, upper_tri_index, fov_estimate, fov_max_error)
+                    self._get_all_patterns_for_index(
+                        hash_index, upper_tri_index, image_pattern_largest_edge, fov_estimate, fov_max_error)
                 if catalog_pattern_edges is None:
                     continue
                 catalog_lookup_count += len(catalog_pattern_edges)
@@ -2140,7 +2141,8 @@ class Tetra3():
                 'RMSE': None, 'Matches': None, 'Prob': None, 'epoch_equinox': None,
                 'epoch_proper_motion': None, 'cache_hit_fraction': None, 'T_solve': t_solve}
 
-    def _get_all_patterns_for_index(self, hash_index, upper_tri_index, fov_estimate, fov_max_error):
+    def _get_all_patterns_for_index(
+            self, hash_index, upper_tri_index, image_pattern_largest_edge, fov_estimate, fov_max_error):
         """Returns (edges, vectors) for all pattern table entries for `hash_index`."""
         val = self._pattern_cache.pop(hash_index, None)
         if val is not None:
@@ -2163,7 +2165,7 @@ class Tetra3():
            and fov_max_error is not None:
             # Can immediately compare FOV to patterns to remove mismatches
             largest_edge = self.pattern_largest_edge[hash_match_inds]
-            fov2 = largest_edge / image_pattern_largest_edge * fov_initial / 1000
+            fov2 = largest_edge / image_pattern_largest_edge * fov_estimate / 1000
             keep = abs(fov2 - fov_estimate) < fov_max_error
             hash_match_inds = hash_match_inds[keep]
             if len(hash_match_inds) == 0:
