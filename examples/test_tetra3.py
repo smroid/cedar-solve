@@ -1,6 +1,6 @@
 """
 This example loads the tetra3 default database and solves for every image in the
-tetra3/examples/data directory.
+tetra3/examples/data/medium_fov directory.
 """
 
 import os
@@ -24,8 +24,6 @@ def draw_box(img_draw, centre, radius, **kwargs):
     bbox = [centre[1] - radius, centre[0] - radius, centre[1] + radius, centre[0] + radius]
     img_draw.rectangle(bbox, **kwargs)
 
-cedar_detect = cedar_detect_client.CedarDetectClient(binary_path='../tetra3/bin/cedar-detect-server')
-
 # Create instance and load the default database, built for 30 to 10 degree field of view.
 # Pass `load_database=None` to not load a database (e.g. to build your own; see
 # generate_database.py example script).
@@ -34,6 +32,10 @@ t3 = tetra3.Tetra3(load_database='default_database')
 # Select method used for star detection and centroiding. True for cedar-detect,
 # False for Tetra3.
 USE_CEDAR_DETECT = True
+
+if USE_CEDAR_DETECT:
+    cedar_detect = cedar_detect_client.CedarDetectClient(
+        binary_path='../tetra3/bin/cedar-detect-server')
 
 # Path where images are
 path = EXAMPLES_DIR / 'data' / 'medium_fov'
@@ -99,4 +101,5 @@ try:
         except IsADirectoryError:
             pass  # Skip the output directory.
 finally:
-    del cedar_detect
+    if USE_CEDAR_DETECT:
+        del cedar_detect
