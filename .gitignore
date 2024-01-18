@@ -21,6 +21,9 @@ tetra3/BSC5*
 tetra3/hip_main.dat
 tetra3/tyc_main.dat
 
+# Output dirs
+examples/data/medium_fov/output
+
 # Databases except the default
 *.npz
 !**/default_database.npz
