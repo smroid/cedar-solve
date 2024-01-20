@@ -623,7 +623,8 @@ class Tetra3():
 
         np.savez_compressed(path, **to_save)
 
-    def _load_catalog(self, star_catalog, range_ra, range_dec, epoch_proper_motion):
+    @staticmethod
+    def _load_catalog(star_catalog, range_ra, range_dec, epoch_proper_motion, logger):
         """Loads the star catalog and returns at tuple of:
         star_table: an array of [ra, dec, 0, 0, 0, mag]
         star_catID: array of catalog IDs for the entries in star_table
@@ -657,35 +658,35 @@ class Tetra3():
             # Check that the catalogue version has the data we need
             stnum = entry[3]
             if stnum != 1:
-                self._logger.warning('Catalogue %s has unexpected "stnum" header value: %s' %
+                logger.warning('Catalogue %s has unexpected "stnum" header value: %s' %
                                      (star_catalog, stnum))
             mprop = entry[4]
             if mprop != 1:
-                self._logger.warning('Catalogue %s has unexpected "mprop" header value: %s' %
+                logger.warning('Catalogue %s has unexpected "mprop" header value: %s' %
                                      (star_catalog, mprop))
             nmag = entry[5]
             if nmag != 1:
-                self._logger.warning('Catalogue %s has unexpected "nmag" header value: %s' %
+                logger.warning('Catalogue %s has unexpected "nmag" header value: %s' %
                                      (star_catalog, nmag))
             nbent = entry[6]
             if nbent != 32:
-                self._logger.warning('Catalogue %s has unexpected "nbent" header value: %s' %
+                logger.warning('Catalogue %s has unexpected "nbent" header value: %s' %
                                      (star_catalog, nbent))
         elif star_catalog in ('hip_main', 'tyc_main'):
             num_entries = sum(1 for _ in open(catalog_file_full_pathname))
             epoch_equinox = 2000
             pm_origin = 1991.25
 
-        self._logger.info('Loading catalogue %s with %s star entries.' %
+        logger.info('Loading catalogue %s with %s star entries.' %
                           (star_catalog, num_entries))
 
         if epoch_proper_motion is None:
             # If pm propagation was disabled, set end date to origin
             epoch_proper_motion = pm_origin
-            self._logger.info('Using catalog RA/Dec %s epoch; not propagating proper motions from %s.' %
+            logger.info('Using catalog RA/Dec %s epoch; not propagating proper motions from %s.' %
                               (epoch_equinox, pm_origin))
         else:
-            self._logger.info('Using catalog RA/Dec %s epoch; propagating proper motions from %s to %s.' %
+            logger.info('Using catalog RA/Dec %s epoch; propagating proper motions from %s to %s.' %
                               (epoch_equinox, pm_origin, epoch_proper_motion))
 
         # Preallocate star table: elements are [ra, dec, x, y, z, mag].
@@ -790,7 +791,7 @@ class Tetra3():
                         star_catID[i, :] = [np.uint16(x) for x in entry[1].split()]
 
                 if incomplete_entries:
-                    self._logger.info('Skipped %i incomplete entries.' % incomplete_entries)
+                    logger.info('Skipped %i incomplete entries.' % incomplete_entries)
 
         # Remove entries in which RA and Dec are both zero
         # (i.e. keep entries in which either RA or Dec is non-zero)
@@ -805,7 +806,7 @@ class Tetra3():
         else:
             star_catID = star_catID[kept, :][brightness_ii, :]
 
-        self._logger.info('Loaded %d stars' % num_entries)
+        logger.info('Loaded %d stars' % num_entries)
 
         # If desired, clip out only a specific range of ra and/or dec for a partial coverage database
         if range_ra is not None:
@@ -821,7 +822,7 @@ class Tetra3():
                 star_catID = star_catID[kept]
             else:
                 star_catID = star_catID[kept, :]
-            self._logger.info('Limited to RA range %s, keeping %s stars.' %
+            logger.info('Limited to RA range %s, keeping %s stars.' %
                               (np.rad2deg(range_ra), num_entries))
         if range_dec is not None:
             range_dec = np.deg2rad(range_dec)
@@ -836,7 +837,7 @@ class Tetra3():
                 star_catID = star_catID[kept]
             else:
                 star_catID = star_catID[kept, :]
-            self._logger.info('Limited to DEC range %s, keeping %s stars.' %
+            logger.info('Limited to DEC range %s, keeping %s stars.' %
                               (np.rad2deg(range_dec), num_entries))
 
         return (star_table, star_catID, epoch_equinox)
@@ -1043,8 +1044,8 @@ class Tetra3():
         else:
             raise ValueError('epoch_proper_motion value %s is forbidden' % epoch_proper_motion)
 
-        star_table, star_catID, epoch_equinox = self._load_catalog(
-            star_catalog, range_ra, range_dec, epoch_proper_motion)
+        star_table, star_catID, epoch_equinox = Tetra3._load_catalog(
+            star_catalog, range_ra, range_dec, epoch_proper_motion, self._logger)
 
         if star_max_magnitude is None:
             # Compute the catalog magnitude cutoff based on the required star density.
@@ -1442,10 +1443,10 @@ class Tetra3():
             self._logger.info('Skipping database file generation.')
 
     def solve_from_image(self, image, fov_estimate=None, fov_max_error=None,
-                         pattern_checking_stars=None, match_radius=.01, match_threshold=1e-3,
+                         match_radius=.01, match_threshold=1e-3,
                          solve_timeout=5000, target_pixel=None, distortion=0,
                          return_matches=False, return_visual=False, match_max_error=None,
-                         **kwargs):
+                         pattern_checking_stars=None, **kwargs):
         """Solve for the sky location of an image.
 
         Star locations (centroids) are found using :meth:`tetra3.get_centroids_from_image` and
@@ -1730,7 +1731,6 @@ class Tetra3():
         catalog_eval_count = 0
         image_patterns_evaluated = 0
         search_space_explored = 0
-        search_space_explored_final_pattern = 0
         prev_pattern_cache_hits = self._pattern_cache_hits
         prev_pattern_cache_misses = self._pattern_cache_misses
 
@@ -1795,10 +1795,8 @@ class Tetra3():
 
             # Iterate over pattern hash values, starting from 'image_pattern_hash' and working
             # our way outward.
-            search_space_explored_final_pattern = 0
             for (_, pattern_hash) in pattern_hash_list:
                 search_space_explored += 1
-                search_space_explored_final_pattern += 1
                 # Calculate corresponding hash index.
                 hash_index = _pattern_hash_to_index(pattern_hash, p_bins, self.pattern_catalog.shape[0])
 
@@ -2114,11 +2112,10 @@ class Tetra3():
 
                     self._logger.debug(solution_dict)
                     self._logger.debug(
-                        'For %d centroids, evaluated %s image patterns; searched %s pattern hashes; %s for final pattern' %
+                        'For %d centroids, evaluated %s image patterns; searched %s pattern hashes' %
                         (num_centroids,
                          image_patterns_evaluated,
-                         search_space_explored,
-                         search_space_explored_final_pattern))
+                         search_space_explored))
                     self._logger.debug(
                         'Looked up/evaluated %s/%s catalog patterns' %
                         (catalog_lookup_count, catalog_eval_count))
@@ -2129,11 +2126,10 @@ class Tetra3():
         self._logger.debug('FAIL: Did not find a match to the stars! It took '
                            + str(round(t_solve)) + ' ms.')
         self._logger.debug(
-            'For %d centroids, evaluated %s image patterns; searched %s pattern hashes; %s for final pattern' %
+            'For %d centroids, evaluated %s image patterns; searched %s pattern hashes' %
             (num_centroids,
              image_patterns_evaluated,
-             search_space_explored,
-             search_space_explored_final_pattern))
+             search_space_explored))
         self._logger.debug(
             'Looked up/evaluated %s/%s catalog patterns' %
             (catalog_lookup_count, catalog_eval_count))
