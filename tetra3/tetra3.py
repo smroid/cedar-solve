@@ -2126,12 +2126,12 @@ class Tetra3():
         self._logger.debug('FAIL: Did not find a match to the stars! It took '
                            + str(round(t_solve)) + ' ms.')
         self._logger.debug(
-            'For %d centroids, evaluated %s image patterns; searched %s pattern hashes' %
+            'FAIL: For %d centroids, evaluated %s image patterns; searched %s pattern hashes' %
             (num_centroids,
              image_patterns_evaluated,
              search_space_explored))
         self._logger.debug(
-            'Looked up/evaluated %s/%s catalog patterns' %
+            'FAIL: Looked up/evaluated %s/%s catalog patterns' %
             (catalog_lookup_count, catalog_eval_count))
         return {'RA': None, 'Dec': None, 'Roll': None, 'FOV': None, 'distortion': None,
                 'RMSE': None, 'Matches': None, 'Prob': None, 'epoch_equinox': None,
