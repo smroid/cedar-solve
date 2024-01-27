@@ -385,7 +385,6 @@ class Tetra3():
                           'pattern_max_error': None, 'max_fov': None, 'min_fov': None,
                           'star_catalog': None, 'epoch_equinox': None, 'epoch_proper_motion': None,
                           'anchor_stars_per_fov': None, 'patterns_per_anchor_star': None,
-                          'min_pattern_star_separation': None,
                           'pattern_stars_per_fov': None, 'verification_stars_per_fov': None,
                           'star_max_magnitude': None, 'simplify_pattern': None,
                           'range_ra': None, 'range_dec': None, 'presort_patterns': None}
@@ -471,8 +470,7 @@ class Tetra3():
             - 'anchor_stars_per_fov': Number of anchor stars used for patterns at each FOV scale.
               Also stored as 'pattern_stars_per_fov'.
             - 'patterns_per_anchor_star': Number of patterns generated for each anchor star.
-            - 'min_pattern_star_separation': Governs density of pattern stars. Is fraction of FOV
-              size.
+            - 'verification_stars_per_fov': Number of stars in solve-time FOV to retain.
             - 'star_max_magnitude': Dimmest apparent magnitude of stars in database.
             - 'star_catalog': Name of the star catalog (e.g. bcs5, hip_main, tyc_main) the database was
               built from. Returns 'unknown' for old databases where this data was not saved.
@@ -530,8 +528,9 @@ class Tetra3():
                 self._logger.debug('Unpacked ' + str(key)+' to: ' + str(self._db_props[key]))
             except ValueError:
                 if key == 'verification_stars_per_fov':
-                    self._db_props[key] = 30
-                    self._logger.debug('No verification_stars_per_fov key, set to 30')
+                    self._db_props[key] = props_packed['catalog_stars_per_fov'][()]
+                    self._logger.debug('Unpacked catalog_stars_per_fov to: ' \
+                        + str(self._db_props[key]))
                 elif key == 'star_max_magnitude':
                     self._db_props[key] = props_packed['star_min_magnitude'][()]
                     self._logger.debug('Unpacked star_min_magnitude to: ' \
@@ -583,7 +582,6 @@ class Tetra3():
                                  self._db_props['anchor_stars_per_fov'],
                                  self._db_props['pattern_stars_per_fov'],
                                  self._db_props['patterns_per_anchor_star'],
-                                 self._db_props['min_pattern_star_separation'],
                                  self._db_props['verification_stars_per_fov'],
                                  self._db_props['star_max_magnitude'],
                                  self._db_props['simplify_pattern'],
@@ -602,7 +600,6 @@ class Tetra3():
                                        ('anchor_stars_per_fov', np.uint16),
                                        ('pattern_stars_per_fov', np.uint16),
                                        ('patterns_per_anchor_star', np.uint16),
-                                       ('min_pattern_star_separation', np.float32),
                                        ('verification_stars_per_fov', np.uint16),
                                        ('star_max_magnitude', np.float32),
                                        ('simplify_pattern', bool),
@@ -845,12 +842,12 @@ class Tetra3():
     def generate_database(self, max_fov, min_fov=None, save_as=None,
                           star_catalog='hip_main',
                           anchor_stars_per_fov=20, patterns_per_anchor_star=40,
-                          min_pattern_star_separation=.05, star_max_magnitude=None,
+                          verification_stars_per_fov=150, star_max_magnitude=None,
                           pattern_max_error=.002, simplify_pattern=True,
                           range_ra=None, range_dec=None,
                           presort_patterns=True, save_largest_edge=True,
                           multiscale_step=1.5, epoch_proper_motion='now',
-                          pattern_stars_per_fov=None, verification_stars_per_fov=None):
+                          pattern_stars_per_fov=None):
         """Create a database and optionally save it to file.
 
         Takes a few minutes for a small (large FOV) database, can take many hours for a large
@@ -962,13 +959,15 @@ class Tetra3():
             star_catalog (string, optional): Abbreviated name of star catalog, one of 'bsc5',
                 'hip_main', or 'tyc_main'. Default 'hip_main'.
             anchor_stars_per_fov (int, optional): Target number of "anchor" stars used for
-                generating patterns in each fov region. We arrange for these anchor stars to be
+                generating patterns in each FOV region. We arrange for these anchor stars to be
                 uniformly distributed over the sky. Use at least 10 to tolerate partial FOV
                 occlusions such as trees or isolated clouds. Default is 20.
             patterns_per_anchor_star (int, optional): The number of patterns generated for each
                 anchor star. Typical values are 20 to 50; default is 40.
-            min_pattern_star_separation (float, optional): Governs density of pattern stars. Given
-                as fraction of the FOV; default .05
+            verification_stars_per_fov (int, optional): Target number of stars used for generating
+                patterns in each FOV region. Also used to limit the number of stars considered for
+                matching in solve images. Typical values are much larger than 'anchor_stars_per_fov';
+                default is 150.
             star_max_magnitude (float, optional): Dimmest apparent magnitude of stars retained
                 from star catalog. None (default) causes the limiting magnitude to be computed
                 based on `min_fov`, `anchor_stars_per_fov`, and `patterns_per_anchor_star`.
@@ -1000,11 +999,10 @@ class Tetra3():
                 without proper motions to be used in the database.
             pattern_stars_per_fov (int, optional): Deprecated. If given, is used instead of
                 `anchor_stars_per_fov`, which has the same meaning.
-            verification_stars_per_fov: No longer used, ignored.
         """
         self._logger.debug('Got generate pattern catalogue with input: '
                            + str((max_fov, min_fov, save_as, star_catalog, anchor_stars_per_fov,
-                                  patterns_per_anchor_star, min_pattern_star_separation,
+                                  patterns_per_anchor_star, verification_stars_per_fov,
                                   star_max_magnitude, pattern_max_error, simplify_pattern,
                                   range_ra, range_dec, presort_patterns, save_largest_edge,
                                   multiscale_step, epoch_proper_motion)))
@@ -1026,7 +1024,7 @@ class Tetra3():
             min_fov = np.deg2rad(float(min_fov))
         anchor_stars_per_fov = int(anchor_stars_per_fov)
         patterns_per_anchor_star = int(patterns_per_anchor_star)
-        min_pattern_star_separation = float(min_pattern_star_separation)
+        verification_stars_per_fov = int(verification_stars_per_fov)
         if star_max_magnitude is not None:
             star_max_magnitude = float(star_max_magnitude)
         PATTERN_SIZE = 4
@@ -1160,13 +1158,13 @@ class Tetra3():
         # limited utility for plate solving because they are all very small relative to the
         # FOV.
         #
-        # We address this problem by applying a `min_pattern_star_separation` constraint to the
+        # We address this problem by applying a `pattern_stars_separation` constraint to the
         # sky catalog stars before choosing an anchor's neighbor stars. In our 10 degree FOV
-        # example, min_pattern_star_separation=0.05 would translate to a half-degree exclusion
-        # zone around each of the Pleiades brightest stars, leaving us with only the 4 or 5
-        # most separated bright Pleiades stars. 5 choose 3 is just 10, so if
-        # `patterns_per_anchor_star` is larger than this (20-50 is typical), we'll generate
-        # plenty of patterns that include stars other than only the Pleiades members.
+        # example, a pattern_stars_separation of 1/2 degree creates an "exclusion zone" around
+        # each of the Pleiades brightest stars, leaving us with only the 4 or 5 most separated
+        # bright Pleiades stars. 5 choose 3 is just 10, so if `patterns_per_anchor_star` is
+        # larger than this (20-50 is typical), we'll generate plenty of patterns that include
+        # stars other than only the Pleiades members.
 
         # Set of patterns found, to be populated across all FOVs.
         pattern_list = set()
@@ -1177,12 +1175,14 @@ class Tetra3():
                 # Single scale database, trim to min_fov, make patterns up to max_fov
                 anchor_stars_separation = _separation_for_density(
                     min_fov, anchor_stars_per_fov)
-                pattern_stars_separation = min_pattern_star_separation * min_fov
+                pattern_stars_separation = _separation_for_density(
+                    min_fov, verification_stars_per_fov)
             else:
                 # Multiscale database, trim and make patterns iteratively at smaller FOVs
                 anchor_stars_separation = _separation_for_density(
                     pattern_fov, anchor_stars_per_fov)
-                pattern_stars_separation = min_pattern_star_separation * pattern_fov
+                pattern_stars_separation = _separation_for_density(
+                    pattern_fov, verification_stars_per_fov)
             self._logger.info('At FOV %s separate anchor/pattern stars by %.2f/%.2f deg.' %
                               (round(np.rad2deg(pattern_fov), 5),
                                np.rad2deg(anchor_stars_separation),
@@ -1427,8 +1427,7 @@ class Tetra3():
         self._db_props['anchor_stars_per_fov'] = anchor_stars_per_fov
         self._db_props['pattern_stars_per_fov'] = anchor_stars_per_fov
         self._db_props['patterns_per_anchor_star'] = patterns_per_anchor_star
-        self._db_props['min_pattern_star_separation'] = min_pattern_star_separation
-        self._db_props['verification_stars_per_fov'] = 30  # No longer used; retire it once old solve code is gone
+        self._db_props['verification_stars_per_fov'] = verification_stars_per_fov
         self._db_props['star_max_magnitude'] = star_max_magnitude
         self._db_props['simplify_pattern'] = simplify_pattern
         self._db_props['range_ra'] = range_ra
@@ -1561,6 +1560,8 @@ class Tetra3():
         else:
             return solution
 
+    # TODO: restore use of 'verification_stars_per_fov' to limit/thin the stars in
+    # the solve.
     def solve_from_centroids(self, star_centroids, size, fov_estimate=None, fov_max_error=None,
                              match_radius=.01, match_threshold=1e-3,
                              solve_timeout=5000, target_pixel=None, distortion=0,
