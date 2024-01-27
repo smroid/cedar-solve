@@ -1560,8 +1560,6 @@ class Tetra3():
         else:
             return solution
 
-    # TODO: restore use of 'verification_stars_per_fov' to limit/thin the stars in
-    # the solve.
     def solve_from_centroids(self, star_centroids, size, fov_estimate=None, fov_max_error=None,
                              match_radius=.01, match_threshold=1e-3,
                              solve_timeout=5000, target_pixel=None, distortion=0,
@@ -1660,13 +1658,12 @@ class Tetra3():
                 dictionary except 'T_solve', and the optional return keys are missing.
         """
         assert self.has_database, 'No database loaded'
+        t0_solve = precision_timestamp()
         self._logger.debug('Got solve from centroids with input: '
                            + str((len(star_centroids), size, fov_estimate, fov_max_error,
                                   match_radius, match_threshold,
                                   solve_timeout, target_pixel, distortion,
                                   return_matches, return_visual, match_max_error)))
-        num_centroids = len(star_centroids)
-        image_centroids = np.asarray(star_centroids)
         if fov_estimate is None:
             # If no FOV given at all, guess middle of the range for a start
             fov_initial = np.deg2rad((self._db_props['max_fov'] + self._db_props['min_fov'])/2)
@@ -1693,6 +1690,7 @@ class Tetra3():
         # extract height (y) and width (x) of image
         (height, width) = size[:2]
         # Extract relevant database properties
+        verification_stars_per_fov = self._db_props['verification_stars_per_fov']
         p_size = self._db_props['pattern_size']
         p_bins = self._db_props['pattern_bins']
         if match_max_error is None:
@@ -1702,7 +1700,12 @@ class Tetra3():
         # Indices to extract from dot product matrix (above diagonal)
         upper_tri_index = np.triu_indices(p_size, 1)
 
-        t0_solve = precision_timestamp()
+        num_centroids = len(star_centroids)
+        image_centroids = np.asarray(star_centroids)
+        if num_centroids > verification_stars_per_fov:
+            image_centroids = image_centroids[:verification_stars_per_fov, :]
+            self._logger.debug('Trimmed %d centroids to %d' % (num_centroids, len(image_centroids)))
+            num_centroids = len(image_centroids)
 
         # If distortion is not None, we need to do some prep work
         if isinstance(distortion, Number):
