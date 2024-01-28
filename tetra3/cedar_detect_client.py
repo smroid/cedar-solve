@@ -1,4 +1,5 @@
 import subprocess
+import time
 
 import grpc
 from multiprocessing import shared_memory
@@ -23,6 +24,7 @@ class CedarDetectClient():
         self._binary_path = binary_path
         self._port = port
         self._subprocess = subprocess.Popen([self._binary_path, '--port', str(self._port)])
+        time.sleep(2)
         # Will initialize on first use.
         self._stub = None
         self._shmem = None

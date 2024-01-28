@@ -48,7 +48,7 @@ try:
 
                 t0 = precision_timestamp()
                 if USE_CEDAR_DETECT:
-                    centroids = cedar_detect.extract_centroids(np_image, sigma=8, max_size=5, use_binned=True)
+                    centroids = cedar_detect.extract_centroids(np_image, sigma=8, max_size=8, use_binned=True)
                 else:
                     centroids = tetra3.get_centroids_from_image(np_image)
                 t_extract = (precision_timestamp() - t0)*1000
@@ -71,8 +71,8 @@ try:
                     print('No stars found, skipping')
                 else:
                     solution = t3.solve_from_centroids(
-                        centroids, (height, width),
-                        fov_estimate=11, return_matches=True, solve_timeout=1000)
+                        centroids, (height, width), fov_estimate=None, match_max_error=.005,
+                        return_matches=True, solve_timeout=1000)
 
                     if 'matched_centroids' in solution:
                         # Draw a green box around each matched star.
