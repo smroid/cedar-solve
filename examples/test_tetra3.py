@@ -87,8 +87,6 @@ try:
                         del solution['matched_stars']
                         del solution['matched_catID']
                         del solution['pattern_centroids']
-                        del solution['pattern_stars']
-                        del solution['pattern_catID']
                         del solution['epoch_equinox']
                         del solution['epoch_proper_motion']
                         del solution['cache_hit_fraction']
