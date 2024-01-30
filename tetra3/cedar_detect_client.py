@@ -15,11 +15,12 @@ import cedar_detect_pb2_grpc
 USE_SHMEM = True
 
 class CedarDetectClient():
-    """TODO: summarize
+    """Executes the cedar-detect-server binary as a subprocess. That binary is a
+    gRPC server described by the tetra3/proto/cedar_detect.proto file.
     """
 
     def __init__(self, binary_path='bin/cedar-detect-server', port=50051):
-        """TODO: describe
+        """Spawns the cedar-detect-server subprocess.
         """
         self._binary_path = binary_path
         self._port = port
@@ -52,14 +53,9 @@ class CedarDetectClient():
                 "/cedar_detect_image", create=True, size=size)
             self._shmem_size = size
 
-    def _extract_centroids_rpc(self, image, sigma, max_size, use_binned):
-        cr = cedar_detect_pb2.CentroidsRequest(
-            input_image=image, sigma=sigma, max_size=max_size, return_binned=False,
-            use_binned_for_star_candidates=use_binned)
-        return self._get_stub().ExtractCentroids(cr)
-
     def extract_centroids(self, image, sigma, max_size, use_binned):
-        """TODO: describe
+        """Invokes the CedarDetect.ExtractCentroids() RPC. Returns [(y,x)] of the
+        detected star centroids.
         """
         np_image = np.asarray(image, dtype=np.uint8)
         (height, width) = np_image.shape
@@ -85,7 +81,10 @@ class CedarDetectClient():
             im = cedar_detect_pb2.Image(width=width, height=height,
                                         image_data=np_image.tobytes())
 
-        centroids_result = self._extract_centroids_rpc(im, sigma, max_size, use_binned)
+        req = cedar_detect_pb2.CentroidsRequest(
+            input_image=im, sigma=sigma, max_size=max_size, return_binned=False,
+            use_binned_for_star_candidates=use_binned)
+        centroids_result = self._get_stub().ExtractCentroids(req)
 
         tetra_centroids = []  # List of (y, x).
         for sc in centroids_result.star_candidates:
