@@ -9,11 +9,6 @@ from PIL import Image
 import cedar_detect_pb2
 import cedar_detect_pb2_grpc
 
-# Use shared memory to make the gRPC calls faster. This works only when the
-# client (this program) and the CedarDetect gRPC server are running on the same
-# machine.
-USE_SHMEM = True
-
 class CedarDetectClient():
     """Executes the cedar-detect-server binary as a subprocess. That binary is a
     gRPC server described by the tetra3/proto/cedar_detect.proto file.
@@ -30,12 +25,12 @@ class CedarDetectClient():
         self._stub = None
         self._shmem = None
         self._shmem_size = 0
+        # Try shared memory, fall back if an error occurs.
+        self._use_shmem = True
 
     def __del__(self):
         self._subprocess.kill()
-        if self._shmem is not None:
-            self._shmem.close()
-            self._shmem.unlink()
+        self._del_shmem()
 
     def _get_stub(self):
         if self._stub is None:
@@ -53,6 +48,12 @@ class CedarDetectClient():
                 "/cedar_detect_image", create=True, size=size)
             self._shmem_size = size
 
+    def _del_shmem(self):
+        if self._shmem is not None:
+            self._shmem.close()
+            self._shmem.unlink()
+            self._shmem = None
+
     def extract_centroids(self, image, sigma, max_size, use_binned):
         """Invokes the CedarDetect.ExtractCentroids() RPC. Returns [(y,x)] of the
         detected star centroids.
@@ -62,10 +63,13 @@ class CedarDetectClient():
 
         centroids_result = None
         im = None
-        if USE_SHMEM:
-            # Using shared memory. The image data is passed in a shared memory
-            # object, with the gRPC request giving the name of the shared memory
-            # object.
+        if self._use_shmem:
+            # Use shared memory to make the gRPC calls faster. This works only
+            # when the client (this program) and the CedarDetect gRPC server are
+            # running on the same machine.
+
+            # The image data is passed in a shared memory object, with the gRPC
+            # request giving the name of the shared memory object.
             self._alloc_shmem(size=width*height)
             # Create numpy array backed by shmem.
             shimg = np.ndarray(np_image.shape, dtype=np_image.dtype, buffer=self._shmem.buf)
@@ -75,16 +79,32 @@ class CedarDetectClient():
 
             im = cedar_detect_pb2.Image(width=width, height=height,
                                         shmem_name=self._shmem.name)
-        else:
+            req = cedar_detect_pb2.CentroidsRequest(
+                input_image=im, sigma=sigma, max_size=max_size, return_binned=False,
+                use_binned_for_star_candidates=use_binned)
+            try:
+                centroids_result = self._get_stub().ExtractCentroids(req)
+            except grpc.RpcError as err:
+                if err.code() == grpc.StatusCode.INTERNAL:
+                    print('RPC failed with: %s' % err.details())
+                    self._del_shmem()
+                    self._use_shmem = False
+                    print('No longer using shared memory for CentroidsRequest() calls')
+                else:
+                    raise
+
+        if not self._use_shmem:
             # Not using shared memory. The image data is passed as part of the
             # gRPC request.
             im = cedar_detect_pb2.Image(width=width, height=height,
                                         image_data=np_image.tobytes())
-
-        req = cedar_detect_pb2.CentroidsRequest(
-            input_image=im, sigma=sigma, max_size=max_size, return_binned=False,
-            use_binned_for_star_candidates=use_binned)
-        centroids_result = self._get_stub().ExtractCentroids(req)
+            req = cedar_detect_pb2.CentroidsRequest(
+                input_image=im, sigma=sigma, max_size=max_size, return_binned=False,
+                use_binned_for_star_candidates=use_binned)
+            try:
+                centroids_result = self._get_stub().ExtractCentroids(req)
+            except:
+                pass
 
         tetra_centroids = []  # List of (y, x).
         for sc in centroids_result.star_candidates:
