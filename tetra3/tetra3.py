@@ -1910,7 +1910,8 @@ class Tetra3():
                     rotation_matrix = _find_rotation_matrix(image_pattern_vectors,
                                                             catalog_pattern_vectors)
 
-                    # Find all star vectors inside the (diagonal) field of view for matching
+                    # Find all star vectors inside the (diagonal) field of view for matching, in
+                    # catalog brightness order.
                     image_center_vector = rotation_matrix[0, :]
                     fov_diagonal_rad = fov * np.sqrt(width**2 + height**2) / width
                     nearby_star_inds = self._get_nearby_stars(image_center_vector, fov_diagonal_rad/2)
@@ -1922,12 +1923,15 @@ class Tetra3():
                                                                        (height, width), fov)
                     nearby_star_vectors = nearby_star_vectors[kept, :]
                     nearby_star_inds = nearby_star_inds[kept]
-                    # Only keep as many as the centroids.
-                    nearby_star_centroids = nearby_star_centroids[:num_centroids]
-                    nearby_star_vectors = nearby_star_vectors[:num_centroids]
-                    nearby_star_inds = nearby_star_inds[:num_centroids]
+                    # Only keep as many nearby stars as the image centroids. The 2x "fudge factor"
+                    # is because image centroids brightness rankings might not match the nearby star
+                    # catalog brightness rankings, so keeping some extra nearby stars helps ensure
+                    # more matches.
+                    nearby_star_centroids = nearby_star_centroids[:2*num_centroids]
+                    nearby_star_vectors = nearby_star_vectors[:2*num_centroids]
+                    nearby_star_inds = nearby_star_inds[:2*num_centroids]
 
-                    # Match these centroids to the image
+                    # Match the image centroids to the nearby star centroids.
                     matched_stars = _find_centroid_matches(
                         image_centroids_undist, nearby_star_centroids, width*match_radius)
                     num_extracted_stars = num_centroids
@@ -1936,7 +1940,8 @@ class Tetra3():
                     self._logger.debug("Number of nearby stars: %d, total matched: %d" \
                                        % (num_nearby_catalog_stars, num_star_matches))
 
-                    # Probability that a single star is a mismatch (fraction of area that are stars)
+                    # Probability that a single star is a mismatch (fraction of FOV area
+                    # that are stars)
                     prob_single_star_mismatch = num_nearby_catalog_stars * match_radius**2
                     # Probability that this rotation matrix's set of matches happen randomly
                     # we subtract two degrees of fredom
