@@ -268,8 +268,9 @@ def _find_centroid_matches(image_centroids, catalog_centroids, r):
     return matches
 
 def _separation_for_density(fov, stars_per_fov):
-    """Compute minimum separation, in radians, for achieving the desired star density.
-    fov: horizontal field of view in radians.
+    """Compute minimum separation, in same units as 'fov', for achieving the desired star
+    density.
+    fov: horizontal field of view.
     stars_per_fov: desired number of stars in field of view
     """
     return .6 * fov / np.sqrt(stars_per_fov)
@@ -1165,6 +1166,9 @@ class Tetra3():
         # bright Pleiades stars. 5 choose 3 is just 10, so if `patterns_per_anchor_star` is
         # larger than this (20-50 is typical), we'll generate plenty of patterns that include
         # stars other than only the Pleiades members.
+        #
+        # A similar "cluster buster" step is performed at solve time, eliminating centroids that
+        # are too closely spaced.
 
         # Set of patterns found, to be populated across all FOVs.
         pattern_list = set()
@@ -1701,9 +1705,30 @@ class Tetra3():
 
         num_centroids = len(star_centroids)
         image_centroids = np.asarray(star_centroids)
+
+        # Apply the same "cluster buster" thinning strategy as is used in database
+        # construction.
+        pattern_stars_separation_pixels = width * _separation_for_density(
+            fov_initial, verification_stars_per_fov) / fov_initial
+        keep_for_patterns = np.full(num_centroids, False)
+        centroids_kd_tree = KDTree(image_centroids)
+        for ind in range(num_centroids):
+            centroid = image_centroids[ind, :]
+            within_separation = centroids_kd_tree.query_ball_point(
+                centroid, pattern_stars_separation_pixels)
+            occupied = np.any(keep_for_patterns[within_separation])
+            # If there isn't a pattern star too close, add this to the pattern table.
+            if not occupied:
+                keep_for_patterns[ind] = True
+        pattern_centroids_inds = np.nonzero(keep_for_patterns)[0]
+        num_pattern_centroids = len(pattern_centroids_inds)
+        if num_pattern_centroids < num_centroids:
+            self._logger.debug('Trimmed %d pattern centroids to %d' %
+                               (num_centroids, num_pattern_centroids))
+
         if num_centroids > verification_stars_per_fov:
             image_centroids = image_centroids[:verification_stars_per_fov, :]
-            self._logger.debug('Trimmed %d centroids to %d' % (num_centroids, len(image_centroids)))
+            self._logger.debug('Trimmed %d match centroids to %d' % (num_centroids, len(image_centroids)))
             num_centroids = len(image_centroids)
 
         # If distortion is not None, we need to do some prep work
@@ -1738,10 +1763,9 @@ class Tetra3():
         prev_pattern_cache_misses = self._pattern_cache_misses
 
         # Try all `p_size` star combinations chosen from the image centroids, brightest first.
-        self._logger.debug('Checking up to %d image patterns from %d centroids.' %
-                           (math.comb(num_centroids, p_size), num_centroids))
-        for image_pattern_indices in breadth_first_combinations(range(num_centroids), p_size):
-            image_pattern_centroids = image_centroids[image_pattern_indices, :]
+        self._logger.debug('Checking up to %d image patterns from %d pattern centroids.' %
+                           (math.comb(num_pattern_centroids, p_size), num_pattern_centroids))
+        for image_pattern_indices in breadth_first_combinations(pattern_centroids_inds, p_size):
             # Check if timeout has elapsed, then we must give up
             if solve_timeout is not None:
                 elapsed_time = precision_timestamp() - t0_solve
@@ -1868,7 +1892,7 @@ class Tetra3():
                         # Can quickly correct FOV by scaling given estimate
                         fov = catalog_largest_edge / image_pattern_largest_edge * fov_initial
                     else:
-                        # Use camera projection to calculate actual fov
+                        # Use camera projection to calculate coarse fov
                         if distortion is None or isinstance(distortion, Number):
                             # The FOV estimate will be the same for each attempt with this pattern
                             # so we can cache the value by checking if we have already set it
