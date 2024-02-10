@@ -113,6 +113,13 @@ from PIL import Image, ImageDraw
 # Local imports.
 from breadth_first_combinations import breadth_first_combinations
 
+# Status codes returned by solve_from_image() and solve_from_centroids()
+MATCH_FOUND = 1
+NO_MATCH = 2
+TIMEOUT = 3
+CANCELLED = 4
+TOO_FEW = 5
+
 _MAGIC_RAND = np.uint64(2654435761)
 _supported_databases = ('bsc5', 'hip_main', 'tyc_main')
 
@@ -370,6 +377,7 @@ class Tetra3():
         self._pattern_catalog = None
         self._pattern_largest_edge = None
         self._verification_catalog = None
+        self._cancelled = False
 
         # See _get_all_patterns_for_index(). During plate solves we need pattern star vectors and
         # edge sizes, but this information is too large to store for all pattern_catalog entries.
@@ -1498,7 +1506,9 @@ class Tetra3():
             dict: A dictionary with the following keys is returned:
                 - 'RA': Right ascension of centre of image in degrees.
                 - 'Dec': Declination of centre of image in degrees.
-                - 'Roll': Rotation of image relative to north celestial pole.
+                - 'Roll': Rotation in degrees of celestial north relative to image's "up"
+                  direction (towards y=0). Zero when north and up coincide; a positive
+                  roll angle means north is counter-clockwise from image "up".
                 - 'FOV': Calculated horizontal field of view of the provided image.
                 - 'distortion': Calculated distortion of the provided image.
                 - 'RMSE': RMS residual of matched stars in arcseconds.
@@ -1528,9 +1538,16 @@ class Tetra3():
                   FOV and distortion estimates in orange, the final FOV and distortion
                   estimates in green. Also has circles for the catalogue stars in green or
                   red for successful/unsuccessful match. Not included if return_visual=False.
+                - 'status': One of:
+                  MATCH_FOUND: solution was obtained
+                  NO_MATCH: no match was found after exhausting all possibilities
+                  TIMEOUT: the 'solve_timeout' was reached before a match could be found
+                  CANCELLED: the solve operation was cancelled before a match could be found
+                  TOO_FEW: the 'image' has too few detected stars to attempt a pattern match
 
-                If unsuccsessful in finding a match, None is returned for all keys of the
-                dictionary except 'T_solve', and the optional return keys are missing.
+                If unsuccessful in finding a match, None is returned for all keys of the
+                dictionary except 'T_solve' and 'status', and the optional return keys are missing.
+
         """
         assert self.has_database, 'No database loaded'
         self._logger.debug('Got solve from image with input: ' + str(
@@ -1626,7 +1643,9 @@ class Tetra3():
             dict: A dictionary with the following keys is returned:
                 - 'RA': Right ascension of centre of image in degrees.
                 - 'Dec': Declination of centre of image in degrees.
-                - 'Roll': Rotation of image relative to north celestial pole.
+                - 'Roll': Rotation in degrees of celestial north relative to image's "up"
+                  direction (towards y=0). Zero when north and up coincide; a positive
+                  roll angle means north is counter-clockwise from image "up".
                 - 'FOV': Calculated horizontal field of view of the provided image.
                 - 'distortion': Calculated distortion of the provided image.
                 - 'RMSE': RMS residual of matched stars in arcseconds.
@@ -1656,9 +1675,16 @@ class Tetra3():
                   FOV and distortion estimates in orange, the final FOV and distortion
                   estimates in green. Also has circles for the catalogue stars in green or
                   red for successful/unsuccessful match. Not included if return_visual=False.
+                - 'status': One of:
+                  MATCH_FOUND: solution was obtained
+                  NO_MATCH: no match was found after exhausting all possibilities
+                  TIMEOUT: the 'solve_timeout' was reached before a match could be found
+                  CANCELLED: the solve operation was cancelled before a match could be found
+                  TOO_FEW: the 'image' has too few detected stars to attempt a pattern match
 
-                If unsuccsessful in finding a match, None is returned for all keys of the
-                dictionary except 'T_solve', and the optional return keys are missing.
+                If unsuccessful in finding a match, None is returned for all keys of the
+                dictionary except 'T_solve' and 'status', and the optional return keys are missing.
+
         """
         assert self.has_database, 'No database loaded'
         t0_solve = precision_timestamp()
@@ -1705,6 +1731,11 @@ class Tetra3():
 
         num_centroids = len(star_centroids)
         image_centroids = np.asarray(star_centroids)
+        if num_centroids < p_size:
+            return {'RA': None, 'Dec': None, 'Roll': None, 'FOV': None, 'distortion': None,
+                    'RMSE': None, 'Matches': None, 'Prob': None, 'epoch_equinox': None,
+                    'epoch_proper_motion': None, 'cache_hit_fraction': None, 'T_solve': 0,
+                    'status': TOO_FEW}
 
         # Apply the same "cluster buster" thinning strategy as is used in database
         # construction.
@@ -1765,13 +1796,22 @@ class Tetra3():
         # Try all `p_size` star combinations chosen from the image centroids, brightest first.
         self._logger.debug('Checking up to %d image patterns from %d pattern centroids.' %
                            (math.comb(num_pattern_centroids, p_size), num_pattern_centroids))
+        status = NO_MATCH
         for image_pattern_indices in breadth_first_combinations(pattern_centroids_inds, p_size):
             # Check if timeout has elapsed, then we must give up
             if solve_timeout is not None:
                 elapsed_time = precision_timestamp() - t0_solve
                 if elapsed_time > solve_timeout:
-                    self._logger.debug('Timeout reached after: ' + str(elapsed_time) + 's.')
+                    self._logger.debug('Timeout reached after: %.2f sec.' % elapsed_time)
+                    status = TIMEOUT
                     break
+            if self._cancelled:
+                elapsed_time = precision_timestamp() - t0_solve
+                self._logger.debug('Cancelled after: %.3f sec.' % elapsed_time)
+                status = CANCELLED
+                self._cancelled = False
+                break
+
             # Set largest distance to None, this is cached to avoid recalculating in future FOV estimation.
             pattern_largest_distance = None
 
@@ -2056,7 +2096,8 @@ class Tetra3():
                                      'epoch_equinox': self._db_props['epoch_equinox'],
                                      'epoch_proper_motion': self._db_props['epoch_proper_motion'],
                                      'cache_hit_fraction': cache_hits / (cache_hits + cache_misses),
-                                     'T_solve': t_solve}
+                                     'T_solve': t_solve,
+                                     'status': MATCH_FOUND}
 
                     # If we were given target pixel(s), calculate their ra/dec
                     if target_pixel is not None:
@@ -2143,8 +2184,9 @@ class Tetra3():
                         'Looked up/evaluated %s/%s catalog patterns' %
                         (catalog_lookup_count, catalog_eval_count))
                     return solution_dict
+        # Close of image_pattern_indices loop
 
-        # Failed to solve, get time and return None
+        # Failed to solve (or timeout or cancel), get time and return None
         t_solve = (precision_timestamp() - t0_solve) * 1000
         self._logger.debug('FAIL: Did not find a match to the stars! It took '
                            + str(round(t_solve)) + ' ms.')
@@ -2158,7 +2200,16 @@ class Tetra3():
             (catalog_lookup_count, catalog_eval_count))
         return {'RA': None, 'Dec': None, 'Roll': None, 'FOV': None, 'distortion': None,
                 'RMSE': None, 'Matches': None, 'Prob': None, 'epoch_equinox': None,
-                'epoch_proper_motion': None, 'cache_hit_fraction': None, 'T_solve': t_solve}
+                'epoch_proper_motion': None, 'cache_hit_fraction': None, 'T_solve': t_solve,
+                'status': status}
+
+    def cancel_solve(self):
+        """Signal that a currently running solve_from_image() or solve_from_centroids() should
+        terminate immediately.
+        If no solve_from_{image,centroids} is running, this call affects the next solve attempt.
+        """
+        self._logger.debug('cancelling')
+        self._cancelled = True
 
     def _get_all_patterns_for_index(
             self, hash_index, upper_tri_index, image_pattern_largest_edge, fov_estimate, fov_max_error):
