@@ -191,7 +191,8 @@ def _compute_centroids(vectors, size, fov):
     vectors: Nx3 of (i,j,k) where i is boresight, j is x (horizontal)
     size: (height, width) in pixels.
     fov: horizontal field of view in radians.
-    We only keep ones within the field of view, also returns list of indices kept
+    We return all centroids plus a list of centroids indices that are within
+    the field of view.
     """
     (height, width) = size[:2]
     scale_factor = -width/2/np.tan(fov/2)
@@ -200,7 +201,7 @@ def _compute_centroids(vectors, size, fov):
     keep = np.flatnonzero(np.logical_and(
         np.all(centroids > [0, 0], axis=1),
         np.all(centroids < [height, width], axis=1)))
-    return (centroids[keep, :], keep)
+    return (centroids, keep)
 
 def _undistort_centroids(centroids, size, k):
     """Apply r_u = r_d(1 - k'*r_d^2)/(1 - k) undistortion, where k'=k*(2/width)^2,
@@ -1455,7 +1456,7 @@ class Tetra3():
 
     def solve_from_image(self, image, fov_estimate=None, fov_max_error=None,
                          match_radius=.01, match_threshold=1e-3,
-                         solve_timeout=5000, target_pixel=None, distortion=0,
+                         solve_timeout=5000, target_pixel=None, target_sky_coord=None, distortion=0,
                          return_matches=False, return_visual=False, match_max_error=None,
                          pattern_checking_stars=None, **kwargs):
         """Solve for the sky location of an image.
@@ -1488,6 +1489,8 @@ class Tetra3():
             target_pixel (numpy.ndarray, optional): Pixel coordinates to return RA/Dec for in
                 addition to the default (the centre of the image). Size (N,2) where each row is the
                 (y, x) coordinate measured from top left corner of the image. Defaults to None.
+            target_sky_coord (numpy.ndarray, optional): Sky coordinates to return image (y, x) for.
+                Size (N,2) where each row is the (RA, Dec) in degrees. Defaults to None.
             distortion (float or tuple, optional): Set the known distortion of the image as a scalar
                  or the range of distortions to search as a tuple (min, max). Negative distortion is
                  barrel, positive is pincushion. Given as amount of distortion at width/2 from centre.
@@ -1523,6 +1526,12 @@ class Tetra3():
                   target_pixel. Not included if target_pixel=None (the default).
                 - 'Dec_target': Declination in degrees of the pixel positions in target_pixel.
                   Not included if target_pixel=None (the default).
+                - 'x_target': image x coordinates for the sky positions passed in target_sky_coord.
+                  If a sky position is outside of the field of view, the corresponding x_target
+                  entry will be None. Not included if target_sky_coord=None (the default).
+                - 'y_target': image y coordinates for the sky positions passed in target_sky_coord.
+                  If a sky position is outside of the field of view, the corresponding y_target
+                  entry will be None. Not included if target_sky_coord=None (the default).
                 - 'matched_stars': An Mx3 list with the (RA, Dec, magnitude) of the M matched stars
                   that were used in the solution. RA/Dec in degrees. Not included if
                   return_matches=False (the default).
@@ -1552,7 +1561,7 @@ class Tetra3():
         assert self.has_database, 'No database loaded'
         self._logger.debug('Got solve from image with input: ' + str(
             (image, fov_estimate, fov_max_error, match_radius,
-             match_threshold, solve_timeout, target_pixel, distortion,
+             match_threshold, solve_timeout, target_pixel, target_sky_coord, distortion,
              return_matches, return_visual, match_max_error, kwargs)))
         (width, height) = image.size[:2]
         self._logger.debug('Image (height, width): ' + str((height, width)))
@@ -1571,7 +1580,8 @@ class Tetra3():
         solution = self.solve_from_centroids(
             centroids, (height, width), fov_estimate=fov_estimate, fov_max_error=fov_max_error,
             match_radius=match_radius, match_threshold=match_threshold,
-            solve_timeout=solve_timeout, target_pixel=target_pixel, distortion=distortion,
+            solve_timeout=solve_timeout, target_pixel=target_pixel,
+            target_sky_coord=target_sky_coord, distortion=distortion,
             return_matches=return_matches, return_visual=return_visual,
             match_max_error=match_max_error)
         # Add extraction time to results and return
@@ -1583,7 +1593,7 @@ class Tetra3():
 
     def solve_from_centroids(self, star_centroids, size, fov_estimate=None, fov_max_error=None,
                              match_radius=.01, match_threshold=1e-3,
-                             solve_timeout=5000, target_pixel=None, distortion=0,
+                             solve_timeout=5000, target_pixel=None, target_sky_coord=None, distortion=0,
                              return_matches=False, return_visual=False, match_max_error=None,
                              pattern_checking_stars=None):
         """Solve for the sky location using a list of centroids.
@@ -1627,6 +1637,8 @@ class Tetra3():
             target_pixel (numpy.ndarray, optional): Pixel coordinates to return RA/Dec for in
                 addition to the default (the centre of the image). Size (N,2) where each row is the
                 (y, x) coordinate measured from top left corner of the image. Defaults to None.
+            target_sky_coord (numpy.ndarray, optional): Sky coordinates to return image (y, x) for.
+                Size (N,2) where each row is the (RA, Dec) in degrees. Defaults to None.
             distortion (float or tuple, optional): Set the known distortion of the image as a scalar
                  or the range of distortions to search as a tuple (min, max). Negative distortion is
                  barrel, positive is pincushion. Given as amount of distortion at width/2 from centre.
@@ -1661,6 +1673,12 @@ class Tetra3():
                 - 'Dec_target': Declination in degrees of the pixel positions in target_pixel.
                   Not included if target_pixel=None (the default). If a Kx2 array
                   of target_pixel was passed, this will be a length K list.
+                - 'x_target': image x coordinates for the sky positions passed in target_sky_coord.
+                  If a sky position is outside of the field of view, the corresponding x_target
+                  entry will be None. Not included if target_sky_coord=None (the default).
+                - 'y_target': image y coordinates for the sky positions passed in target_sky_coord.
+                  If a sky position is outside of the field of view, the corresponding y_target
+                  entry will be None. Not included if target_sky_coord=None (the default).
                 - 'matched_stars': An Mx3 list with the (RA, Dec, magnitude) of the M matched stars
                   that were used in the solution. RA/Dec in degrees. Not included if
                   return_matches=False (the default).
@@ -1691,7 +1709,7 @@ class Tetra3():
         self._logger.debug('Got solve from centroids with input: '
                            + str((len(star_centroids), size, fov_estimate, fov_max_error,
                                   match_radius, match_threshold,
-                                  solve_timeout, target_pixel, distortion,
+                                  solve_timeout, target_pixel, target_sky_coord, distortion,
                                   return_matches, return_visual, match_max_error)))
         if fov_estimate is None:
             # If no FOV given at all, guess middle of the range for a start
@@ -1714,6 +1732,11 @@ class Tetra3():
             if target_pixel.ndim == 1:
                 # Make shape (2,) array to (1,2), to match (N,2) pattern
                 target_pixel = target_pixel[None, :]
+        if target_sky_coord is not None:
+            target_sky_coord = np.array(target_sky_coord)
+            if target_sky_coord.ndim == 1:
+                # Make shape (2,) array to (1,2), to match (N,2) pattern
+                target_sky_coord = target_sky_coord[None, :]
         return_matches = bool(return_matches)
 
         # extract height (y) and width (x) of image
@@ -1985,6 +2008,7 @@ class Tetra3():
                     nearby_star_vectors_derot = np.dot(rotation_matrix, nearby_star_vectors.T).T
                     (nearby_star_centroids, kept) = _compute_centroids(nearby_star_vectors_derot,
                                                                        (height, width), fov)
+                    nearby_star_centroids = nearby_star_centroids[kept, :]
                     nearby_star_vectors = nearby_star_vectors[kept, :]
                     nearby_star_inds = nearby_star_inds[kept]
                     # Only keep as many nearby stars as the image centroids. The 2x "fudge factor"
@@ -2101,8 +2125,7 @@ class Tetra3():
 
                     # If we were given target pixel(s), calculate their ra/dec
                     if target_pixel is not None:
-                        self._logger.debug('Calculate RA/Dec for targets: '
-                                           + str(target_pixel))
+                        self._logger.debug('Calculate RA/Dec for targets: %s' % target_pixel)
                         # Calculate the vector in the sky of the target pixel(s)
                         if k is not None:
                             target_pixel = _undistort_centroids(target_pixel, (height, width), k)
@@ -2121,6 +2144,38 @@ class Tetra3():
                         else:
                             solution_dict['RA_target'] = target_ra[0]
                             solution_dict['Dec_target'] = target_dec[0]
+
+
+                    # If we were given target sky coord(s), calculate their image x/y if
+                    # within FOV.
+                    if target_sky_coord is not None:
+                        self._logger.debug('Calculate y/x for sky targets: %s' % target_sky_coord)
+                        target_sky_vectors = []
+                        for tsc in target_sky_coord:
+                            ra = np.deg2rad(tsc[0])
+                            dec = np.deg2rad(tsc[1])
+                            target_sky_vectors.append([np.cos(ra) * np.cos(dec),
+                                                       np.sin(ra) * np.cos(dec),
+                                                       np.sin(dec)])
+                        target_sky_vectors = np.array(target_sky_vectors)
+                        target_sky_vectors_derot = np.dot(rotation_matrix, target_sky_vectors.T).T
+                        (target_centroids, kept) = _compute_centroids(target_sky_vectors_derot,
+                                                                      (height, width), fov)
+                        target_y = []
+                        target_x = []
+                        for i in range(target_centroids.shape[0]):
+                            if i in kept:
+                                target_y.append(target_centroids[i][0])
+                                target_x.append(target_centroids[i][1])
+                            else:
+                                target_y.append(None)
+                                target_x.append(None)
+                        if target_sky_coord.shape[0] > 1:
+                            solution_dict['y_target'] = target_y
+                            solution_dict['x_target'] = target_x
+                        else:
+                            solution_dict['y_target'] = target_y[0]
+                            solution_dict['x_target'] = target_x[0]
 
                     # If requested to return data about matches, append to dict
                     if return_matches:
