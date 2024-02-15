@@ -1540,9 +1540,8 @@ class Tetra3():
                 - 'matched_catID': The catalogue ID corresponding to each matched star. See
                   Tetra3.star_catalog_IDs for information on the format. Not included if
                   return_matches=False.
-                - 'pattern_stars', 'pattern_centroids', 'pattern_catID': similar to the
-                  corresponding matched_xxx attributes, except just for the pattern stars.
-                  Not included if return_matches=False.
+                - 'pattern_centroids': similar to matched_centroids, except just for the pattern
+                  stars. Not included if return_matches=False.
                 - 'visual': A PIL image with spots for the given centroids in white, the coarse
                   FOV and distortion estimates in orange, the final FOV and distortion
                   estimates in green. Also has circles for the catalogue stars in green or
@@ -1687,8 +1686,8 @@ class Tetra3():
                 - 'matched_catID': The catalogue ID corresponding to each matched star. See
                   Tetra3.star_catalog_IDs for information on the format. Not included if
                   return_matches=False.
-                - 'pattern_centroids': similar to the corresponding matched_centroids attribute,
-                  except just for the pattern stars. Not included if return_matches=False.
+                - 'pattern_centroids': similar to matched_centroids, except just for the pattern
+                  stars. Not included if return_matches=False.
                 - 'visual': A PIL image with spots for the given centroids in white, the coarse
                   FOV and distortion estimates in orange, the final FOV and distortion
                   estimates in green. Also has circles for the catalogue stars in green or
