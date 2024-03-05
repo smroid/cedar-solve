@@ -1,3 +1,4 @@
+import logging
 import subprocess
 import time
 
@@ -86,12 +87,12 @@ class CedarDetectClient():
                 centroids_result = self._get_stub().ExtractCentroids(req)
             except grpc.RpcError as err:
                 if err.code() == grpc.StatusCode.INTERNAL:
-                    print('RPC failed with: %s' % err.details())
+                    logging.warning('RPC failed with: %s' % err.details())
                     self._del_shmem()
                     self._use_shmem = False
-                    print('No longer using shared memory for CentroidsRequest() calls')
+                    logging.info('No longer using shared memory for CentroidsRequest() calls')
                 else:
-                    raise
+                    logging.error('RPC (with shmem) failed with: %s' % err.details())
 
         if not self._use_shmem:
             # Not using shared memory. The image data is passed as part of the
@@ -103,10 +104,11 @@ class CedarDetectClient():
                 use_binned_for_star_candidates=use_binned)
             try:
                 centroids_result = self._get_stub().ExtractCentroids(req)
-            except:
-                pass
+            except grpc.RpcError as err:
+                logging.error('RPC failed with: %s' % err.details())
 
         tetra_centroids = []  # List of (y, x).
-        for sc in centroids_result.star_candidates:
-            tetra_centroids.append((sc.centroid_position.y, sc.centroid_position.x))
+        if centroids_result is not None:
+            for sc in centroids_result.star_candidates:
+                tetra_centroids.append((sc.centroid_position.y, sc.centroid_position.x))
         return tetra_centroids
