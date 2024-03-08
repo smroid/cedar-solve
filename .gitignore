@@ -24,6 +24,9 @@ tetra3/tyc_main.dat
 # Output dirs
 examples/data/medium_fov/output
 
+# We don't store the binary.
+tetra3/bin/cedar-detect-server
+
 # Databases except the default
 *.npz
 !**/default_database.npz

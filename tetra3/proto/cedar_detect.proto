@@ -44,6 +44,11 @@ message CentroidsRequest {
   // Note that centroid positions are reported in full-res `input_image`
   // coordinates even if the binned image is the source of candidates.
   bool use_binned_for_star_candidates = 5;
+
+  // If true, hot pixels are detected (prior to binning, if used) and do not
+  // contribute to detected stars. If false, hot pixels could be falsely
+  // detected as stars.
+  bool detect_hot_pixels = 6;
 }
 
 message CentroidsResult {
@@ -53,6 +58,9 @@ message CentroidsResult {
   // The number of hot pixels seen. See algorithm implementation for more
   // information about hot pixels.
   int32 hot_pixel_count = 2;
+
+  // The peak pixel value of the identified star candidates.
+  int32 peak_star_pixel = 6;
 
   // The star candidates detected by CedarDetect; ordered by highest
   // brightness first.
@@ -101,5 +109,6 @@ message ImageCoord {
 }
 
 service CedarDetect {
+  // Returns INTERNAL error if the Image request's shared memory cannot be accessed.
   rpc ExtractCentroids(CentroidsRequest) returns (CentroidsResult);
 }

@@ -7,32 +7,36 @@ from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Map
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class CentroidsRequest(_message.Message):
-    __slots__ = ["input_image", "sigma", "max_size", "return_binned", "use_binned_for_star_candidates"]
+    __slots__ = ["input_image", "sigma", "max_size", "return_binned", "use_binned_for_star_candidates", "detect_hot_pixels"]
     INPUT_IMAGE_FIELD_NUMBER: _ClassVar[int]
     SIGMA_FIELD_NUMBER: _ClassVar[int]
     MAX_SIZE_FIELD_NUMBER: _ClassVar[int]
     RETURN_BINNED_FIELD_NUMBER: _ClassVar[int]
     USE_BINNED_FOR_STAR_CANDIDATES_FIELD_NUMBER: _ClassVar[int]
+    DETECT_HOT_PIXELS_FIELD_NUMBER: _ClassVar[int]
     input_image: Image
     sigma: float
     max_size: int
     return_binned: bool
     use_binned_for_star_candidates: bool
-    def __init__(self, input_image: _Optional[_Union[Image, _Mapping]] = ..., sigma: _Optional[float] = ..., max_size: _Optional[int] = ..., return_binned: bool = ..., use_binned_for_star_candidates: bool = ...) -> None: ...
+    detect_hot_pixels: bool
+    def __init__(self, input_image: _Optional[_Union[Image, _Mapping]] = ..., sigma: _Optional[float] = ..., max_size: _Optional[int] = ..., return_binned: bool = ..., use_binned_for_star_candidates: bool = ..., detect_hot_pixels: bool = ...) -> None: ...
 
 class CentroidsResult(_message.Message):
-    __slots__ = ["noise_estimate", "hot_pixel_count", "star_candidates", "binned_image", "algorithm_time"]
+    __slots__ = ["noise_estimate", "hot_pixel_count", "peak_star_pixel", "star_candidates", "binned_image", "algorithm_time"]
     NOISE_ESTIMATE_FIELD_NUMBER: _ClassVar[int]
     HOT_PIXEL_COUNT_FIELD_NUMBER: _ClassVar[int]
+    PEAK_STAR_PIXEL_FIELD_NUMBER: _ClassVar[int]
     STAR_CANDIDATES_FIELD_NUMBER: _ClassVar[int]
     BINNED_IMAGE_FIELD_NUMBER: _ClassVar[int]
     ALGORITHM_TIME_FIELD_NUMBER: _ClassVar[int]
     noise_estimate: float
     hot_pixel_count: int
+    peak_star_pixel: int
     star_candidates: _containers.RepeatedCompositeFieldContainer[StarCentroid]
     binned_image: Image
     algorithm_time: _duration_pb2.Duration
-    def __init__(self, noise_estimate: _Optional[float] = ..., hot_pixel_count: _Optional[int] = ..., star_candidates: _Optional[_Iterable[_Union[StarCentroid, _Mapping]]] = ..., binned_image: _Optional[_Union[Image, _Mapping]] = ..., algorithm_time: _Optional[_Union[_duration_pb2.Duration, _Mapping]] = ...) -> None: ...
+    def __init__(self, noise_estimate: _Optional[float] = ..., hot_pixel_count: _Optional[int] = ..., peak_star_pixel: _Optional[int] = ..., star_candidates: _Optional[_Iterable[_Union[StarCentroid, _Mapping]]] = ..., binned_image: _Optional[_Union[Image, _Mapping]] = ..., algorithm_time: _Optional[_Union[_duration_pb2.Duration, _Mapping]] = ...) -> None: ...
 
 class Image(_message.Message):
     __slots__ = ["width", "height", "image_data", "shmem_name"]
