@@ -48,13 +48,15 @@ try:
 
                 t0 = precision_timestamp()
                 if USE_CEDAR_DETECT:
-                    centroids = cedar_detect.extract_centroids(np_image, sigma=8, max_size=8, use_binned=True)
+                    centroids = cedar_detect.extract_centroids(
+                        np_image, sigma=8, max_size=10, use_binned=True)
                 else:
-                    centroids = tetra3.get_centroids_from_image(np_image)
+                    centroids = tetra3.get_centroids_from_image(np_image, downsample=2)
                 t_extract = (precision_timestamp() - t0)*1000
 
                 basename = os.path.basename(impath)
-                print('File %s, extracted %d centroids in %.2fms' % (basename, len(centroids), t_extract))
+                print('File %s, extracted %d centroids in %.2fms' %
+                      (basename, len(centroids), t_extract))
 
                 # Draw a small blue circle around each centroid.
                 (width, height) = img.size[:2]
@@ -62,7 +64,7 @@ try:
                 out_img.paste(img)
                 img_draw = ImageDraw.Draw(out_img)
                 for cent in centroids:
-                    draw_circle(img_draw, cent, 3, outline=(64, 64, 255))
+                    draw_circle(img_draw, cent, 4, outline=(64, 64, 255))
 
                 # Here you can add e.g. `fov_estimate`/`fov_max_error` to improve speed or a
                 # `distortion` range to search (default assumes undistorted image). There
@@ -70,27 +72,30 @@ try:
                 if len(centroids) == 0:
                     print('No stars found, skipping')
                 else:
+                    # Generally 30 centroids is more than enough for Tetra3 to find a
+                    # solution. Passing additional centroids just slows solve_from_centroids()
+                    # down somewhat.
+                    trimmed_centroids = centroids[:30]
                     solution = t3.solve_from_centroids(
-                        centroids, (height, width), fov_estimate=None, match_max_error=.005,
-                        return_matches=True, solve_timeout=1000)
+                        trimmed_centroids, (height, width), fov_estimate=None,
+                        match_threshold=1e-4, return_matches=True, solve_timeout=5000)
 
                     if 'matched_centroids' in solution:
                         # Draw a green box around each matched star.
                         for cent in solution['matched_centroids']:
-                            draw_box(img_draw, cent, 5, outline=(32, 128, 32))
-                        # Overdraw a red box around each pattern star.
+                            draw_box(img_draw, cent, 6, outline=(32, 192, 32))
+                        # Draw a red box around each pattern star.
                         for cent in solution['pattern_centroids']:
-                            draw_box(img_draw, cent, 5, outline=(128, 32, 32))
+                            draw_box(img_draw, cent, 6, outline=(192, 32, 32))
 
-                        # Don't clutter printed solution with these fields.
-                        del solution['matched_centroids']
-                        del solution['matched_stars']
-                        del solution['matched_catID']
-                        del solution['pattern_centroids']
-                        del solution['epoch_equinox']
-                        del solution['epoch_proper_motion']
-                        del solution['cache_hit_fraction']
-
+                    # Don't clutter printed solution with these fields.
+                    solution.pop('matched_centroids', None)
+                    solution.pop('matched_stars', None)
+                    solution.pop('matched_catID', None)
+                    solution.pop('pattern_centroids', None)
+                    solution.pop('epoch_equinox', None)
+                    solution.pop('epoch_proper_motion', None)
+                    solution.pop('cache_hit_fraction', None)
                     print('Solution %s' % solution)
 
                 name, ext = os.path.splitext(basename)
