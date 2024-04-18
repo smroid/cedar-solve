@@ -1282,19 +1282,25 @@ class Tetra3():
         table_collisions = 0
 
         # Go through each pattern and insert to the catalogue
-        for (index, pattern) in enumerate(pattern_list):
-            if index % 100000 == 0 and index > 0:
-                self._logger.info('Inserting pattern number: ' + str(index))
+        for (pat_index, pattern) in enumerate(pattern_list):
+            if pat_index % 100000 == 0 and pat_index > 0:
+                self._logger.info('Inserting pattern number: ' + str(pat_index))
 
             # retrieve the vectors of the stars in the pattern
-            vectors = star_table[pattern, 2:5]
+            vectors = [star_table[p, 2:5].tolist() for p in pattern]
 
-            # implement more accurate angle calculation
-            edge_angles_sorted = np.sort(_angle_from_distance(pdist(vectors)))
-            edge_ratios = edge_angles_sorted[:-1] / edge_angles_sorted[-1]
+            edge_angles = []
+            for i, j in itertools.combinations(range(4), 2):
+                dist = math.dist(vectors[i], vectors[j])
+                # implement more accurate angle calculation
+                edge_angles.append(2.0 * math.asin(0.5 * dist))
+
+            edge_angles_sorted = sorted(edge_angles)
+            largest_angle = edge_angles_sorted[-1]
+            edge_ratios = [angle / largest_angle for angle in edge_angles_sorted[:-1]]
 
             # convert edge ratio float to pattern hash by binning
-            pattern_hash = tuple((edge_ratios * pattern_bins).astype(int))
+            pattern_hash = [int(ratio * pattern_bins) for ratio in edge_ratios]
             hash_index = _pattern_hash_to_index(pattern_hash, pattern_bins, catalog_length)
 
             is_novel_index = False
@@ -1313,16 +1319,21 @@ class Tetra3():
 
             if presort_patterns:
                 # find the centroid, or average position, of the star pattern
-                pattern_centroid = np.mean(vectors, axis=0)
+                pattern_centroid = list(map(lambda a : sum(a) / len(a), zip(*vectors)))
+
                 # calculate each star's radius, or Euclidean distance from the centroid
-                pattern_radii = cdist(vectors, pattern_centroid[None, :]).flatten()
+                centroid_distances = []  # Elements: (distance, index in pattern)
+                for index, v in enumerate(vectors):
+                    dist2 = sum((x1 - x2) * (x1 - x2) for (x1, x2) in zip(v, pattern_centroid))
+                    centroid_distances.append((dist2, index))
+                centroid_distances.sort()
                 # use the radii to uniquely order the pattern, used for future matching
-                pattern = np.array(pattern)[np.argsort(pattern_radii)]
+                pattern = [pattern[i] for (_, i) in centroid_distances]
 
             (index, collision) = _insert_at_index(pattern, hash_index, pattern_catalog)
             if save_largest_edge:
                 # Store as milliradian to better use float16 range
-                pattern_largest_edge[index] = edge_angles_sorted[-1]*1000
+                pattern_largest_edge[index] = largest_angle*1000
             if is_novel_index and collision:
                 table_collisions += 1
 
