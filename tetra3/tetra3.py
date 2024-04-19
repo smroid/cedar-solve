@@ -1289,12 +1289,8 @@ class Tetra3():
             # retrieve the vectors of the stars in the pattern
             vectors = [star_table[p, 2:5].tolist() for p in pattern]
 
-            edge_angles = []
-            for i, j in itertools.combinations(range(4), 2):
-                dist = math.dist(vectors[i], vectors[j])
-                # implement more accurate angle calculation
-                edge_angles.append(2.0 * math.asin(0.5 * dist))
-
+            edge_angles = [2.0 * math.asin(0.5 * math.dist(vectors[i], vectors[j]))
+                           for i, j in itertools.combinations(range(4), 2)]
             edge_angles_sorted = sorted(edge_angles)
             largest_angle = edge_angles_sorted[-1]
             edge_ratios = [angle / largest_angle for angle in edge_angles_sorted[:-1]]
@@ -1306,7 +1302,7 @@ class Tetra3():
             is_novel_index = False
             if EVALUATE_COLLISIONS:
                 prev_len = len(pattern_hashes_seen)
-                pattern_hashes_seen.add(pattern_hash)
+                pattern_hashes_seen.add(tuple(pattern_hash))
                 if prev_len == len(pattern_hashes_seen):
                     pattern_hash_collisions += 1
                 else:
@@ -1322,10 +1318,11 @@ class Tetra3():
                 pattern_centroid = list(map(lambda a : sum(a) / len(a), zip(*vectors)))
 
                 # calculate each star's radius, or Euclidean distance from the centroid
-                centroid_distances = []  # Elements: (distance, index in pattern)
-                for index, v in enumerate(vectors):
-                    dist2 = sum((x1 - x2) * (x1 - x2) for (x1, x2) in zip(v, pattern_centroid))
-                    centroid_distances.append((dist2, index))
+
+                # Elements: (distance, index in pattern)
+                centroid_distances = [
+                    (sum((x1 - x2) * (x1 - x2) for (x1, x2) in zip(v, pattern_centroid)), index)
+                    for index, v in enumerate(vectors)]
                 centroid_distances.sort()
                 # use the radii to uniquely order the pattern, used for future matching
                 pattern = [pattern[i] for (_, i) in centroid_distances]
