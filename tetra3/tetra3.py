@@ -2208,7 +2208,7 @@ class Tetra3():
            and fov_estimate is not None \
            and fov_max_error is not None:
             # Can immediately compare FOV to patterns to remove mismatches
-            largest_edge = self.pattern_largest_edge[hash_match_inds]
+            largest_edge = self.pattern_largest_edge[hash_match_inds].astype(np.float32)
             fov2 = largest_edge / image_pattern_largest_edge * fov_estimate / 1000
             keep = abs(fov2 - fov_estimate) < fov_max_error
             hash_match_inds = hash_match_inds[keep]
