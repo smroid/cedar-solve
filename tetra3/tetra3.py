@@ -849,7 +849,7 @@ class Tetra3():
 
     def generate_database(self, max_fov, min_fov=None, save_as=None,
                           star_catalog='hip_main',
-                          lattice_field_oversampling=20, patterns_per_lattice_field=50,
+                          lattice_field_oversampling=100, patterns_per_lattice_field=50,
                           verification_stars_per_fov=150, star_max_magnitude=None,
                           pattern_max_error=.002, range_ra=None, range_dec=None,
                           presort_patterns=True, save_largest_edge=True,
@@ -967,7 +967,7 @@ class Tetra3():
                 'hip_main', or 'tyc_main'. Default 'hip_main'.
             lattice_field_oversampling (int, optional): When uniformly distributing pattern
                 generation fields over the celestial sphere, this determines the overlap factor.
-                Default is 20.
+                Default is 100.
             patterns_per_lattice_field (int, optional): The number of patterns generated for each
                 lattice field. Typical values are 20 to 100; default is 50.
             verification_stars_per_fov (int, optional): Target number of stars used for generating
@@ -1025,7 +1025,15 @@ class Tetra3():
             min_fov = max_fov
         else:
             min_fov = np.deg2rad(float(min_fov))
+
+        # Making lattice_field_oversampling larger yields more patterns, with diminishing
+        # returns.
+        # value   fraction of patterns found compared to lattice_field_oversampling=100000
+        # 100     0.61
+        # 1000    0.86
+        # 10000   0.96
         lattice_field_oversampling = int(lattice_field_oversampling)
+
         patterns_per_lattice_field = int(patterns_per_lattice_field)
         verification_stars_per_fov = int(verification_stars_per_fov)
         if star_max_magnitude is not None:
@@ -1121,7 +1129,7 @@ class Tetra3():
         # fixed number (`patterns_per_lattice_field`, typically 50) of patterns, thus ensuring that
         # all parts of the sky have the same density of database patterns. Because a solve-time
         # field of view might not line up with a lattice field, a `lattice_field_oversampling`
-        # parameter (typically 20) is used to increase the number of lattice fields, overlapping
+        # parameter (typically 100) is used to increase the number of lattice fields, overlapping
         # them.
         #
         # Favor bright stars: within each lattice field, nearly all (see below) sky catalog stars in
@@ -1226,25 +1234,24 @@ class Tetra3():
                 # 'patterns_per_lattice_field' patterns.
                 patterns_this_lattice_field = 0
                 for pattern in breadth_first_combinations(field_pattern_stars, PATTERN_SIZE):
-                    total_added_patterns += 1
-                    total_mag = sum(star_table[p, 5] for p in pattern)
-                    total_pattern_avg_mag += total_mag / PATTERN_SIZE
-                    max_pattern_mag = max(star_table[pattern[-1], 5], max_pattern_mag)
-
                     len_before = len(pattern_list)
                     pattern_list.add(tuple(pattern))
-                    if len(pattern_list) > len_before and len(pattern_list) % 100000 == 0:
-                        self._logger.info('Generated %s patterns so far.' % len(pattern_list))
+                    if len(pattern_list) > len_before:
+                        total_added_patterns += 1
+                        total_mag = sum(star_table[p, 5] for p in pattern)
+                        total_pattern_avg_mag += total_mag / PATTERN_SIZE
+                        max_pattern_mag = max(star_table[pattern[-1], 5], max_pattern_mag)
+                        if len(pattern_list) % 100000 == 0:
+                            self._logger.info('Generated %s patterns so far.' % len(pattern_list))
 
                     patterns_this_lattice_field += 1
                     if patterns_this_lattice_field >= patterns_per_lattice_field:
                         break
 
             self._logger.info(
-                'avg/min pattern stars per lattice field %.2f/%d; avg patterns per lattice field %.2f; avg/max pattern mag %.2f/%.2f' %
+                'avg/min pattern stars per lattice field %.2f/%d; avg/max pattern mag %.2f/%.2f' %
                 (total_field_pattern_stars / num_lattice_fields,
                  min_stars_per_lattice_field,
-                 total_added_patterns / num_lattice_fields,
                  total_pattern_avg_mag / total_added_patterns,
                  max_pattern_mag))
 
@@ -1375,7 +1382,7 @@ class Tetra3():
             self._logger.info('Skipping database file generation.')
 
     def solve_from_image(self, image, fov_estimate=None, fov_max_error=None,
-                         match_radius=.01, match_threshold=1e-3,
+                         match_radius=.01, match_threshold=1e-4,
                          solve_timeout=5000, target_pixel=None, target_sky_coord=None, distortion=0,
                          return_matches=False, return_visual=False, match_max_error=None,
                          pattern_checking_stars=None, **kwargs):
@@ -1403,7 +1410,7 @@ class Tetra3():
             match_radius (float, optional): Maximum distance to a star to be considered a match
                 as a fraction of the image field of view.
             match_threshold (float, optional): Maximum allowed false-positive probability to accept
-                a tested pattern a valid match. Default 1e-3. NEW: Corrected for the database size.
+                a tested pattern a valid match. Default 1e-4. NEW: Corrected for the database size.
             solve_timeout (float, optional): Timeout in milliseconds after which the solver will
                 give up on matching patterns. Defaults to 5000 (5 seconds).
             target_pixel (numpy.ndarray, optional): Pixel coordinates to return RA/Dec for in
@@ -1511,7 +1518,7 @@ class Tetra3():
             return solution
 
     def solve_from_centroids(self, star_centroids, size, fov_estimate=None, fov_max_error=None,
-                             match_radius=.01, match_threshold=1e-3,
+                             match_radius=.01, match_threshold=1e-4,
                              solve_timeout=5000, target_pixel=None, target_sky_coord=None, distortion=0,
                              return_matches=False, return_visual=False, match_max_error=None,
                              pattern_checking_stars=None):
@@ -1550,7 +1557,7 @@ class Tetra3():
             match_radius (float, optional): Maximum distance to a star to be considered a match
                 as a fraction of the image field of view. Default 0.01.
             match_threshold (float, optional): Maximum allowed false-positive probability to accept
-                a tested pattern a valid match. Default 1e-3. NEW: Corrected for the database size.
+                a tested pattern a valid match. Default 1e-4. NEW: Corrected for the database size.
             solve_timeout (float, optional): Timeout in milliseconds after which the solver will
                 give up on matching patterns. Defaults to 5000 (5 seconds).
             target_pixel (numpy.ndarray, optional): Pixel coordinates to return RA/Dec for in
