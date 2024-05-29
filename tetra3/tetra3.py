@@ -370,6 +370,7 @@ class Tetra3():
         self._star_table = None
         self._star_catalog_IDs = None
         self._pattern_catalog = None
+        self._num_patterns = None
         self._pattern_largest_edge = None
         self._verification_catalog = None
         self._cancelled = False
@@ -390,7 +391,8 @@ class Tetra3():
                           'star_catalog': None, 'epoch_equinox': None, 'epoch_proper_motion': None,
                           'lattice_field_oversampling': None, 'patterns_per_lattice_field': None,
                           'verification_stars_per_fov': None, 'star_max_magnitude': None,
-                          'range_ra': None, 'range_dec': None, 'presort_patterns': None}
+                          'range_ra': None, 'range_dec': None, 'presort_patterns': None,
+                          'num_patterns': None}
 
         if load_database is not None:
             self._logger.debug('Trying to load database')
@@ -435,6 +437,11 @@ class Tetra3():
     def pattern_catalog(self):
         """numpy.ndarray: Catalog of patterns in the database."""
         return self._pattern_catalog
+
+    @property
+    def num_patterns(self):
+        """numpy.uint32: Number of patterns in the database."""
+        return self._num_patterns
 
     @property
     def pattern_largest_edge(self):
@@ -487,6 +494,8 @@ class Tetra3():
               (degrees 0 to 360). If None, the whole sky is included.
             - 'range_dec': The portion of the sky in declination (min, max) that is in the database
               (degrees -90 to 90). If None, the whole sky is included.
+            - 'num_patterns': The number of patterns in the database. If None, this is one
+              half of the pattern table size.
         """
         return self._db_props
 
@@ -510,8 +519,6 @@ class Tetra3():
         with np.load(path) as data:
             self._logger.debug('Loaded database, unpack files')
             self._pattern_catalog = data['pattern_catalog']
-            self._pattern_cache_capacity = \
-                self._pattern_cache_size_fraction * self.pattern_catalog.shape[0] // 2
             self._star_table = data['star_table']
             props_packed = data['props_packed']
             try:
@@ -545,12 +552,17 @@ class Tetra3():
                 elif key == 'star_catalog':
                     self._db_props[key] = 'unknown'
                     self._logger.debug('No star_catalog key, set to unknown')
+                elif key == 'num_patterns':
+                    self._db_props[key] = self.pattern_catalog.shape[0] // 2
+                    self._logger.debug('No num_patterns key, set to half of pattern_catalog size')
                 else:
                     self._db_props[key] = None
                     self._logger.warning('Missing key in database (likely version difference): ' + str(key))
         if self._db_props['min_fov'] is None:
             self._logger.debug('No min_fov key, copy from max_fov')
             self._db_props['min_fov'] = self._db_props['max_fov']
+        self._num_patterns = self._db_props['num_patterns']
+        self._pattern_cache_capacity = self._pattern_cache_size_fraction * self.num_patterns
         self._logger.debug('Database pattern_max_error: %s' %
                            self._db_props['pattern_max_error'])
 
@@ -593,7 +605,8 @@ class Tetra3():
                                  self._db_props['simplify_pattern'],  # legacy
                                  self._db_props['range_ra'],
                                  self._db_props['range_dec'],
-                                 self._db_props['presort_patterns']),
+                                 self._db_props['presort_patterns'],
+                                 self._db_props['num_patterns']),
                                 dtype=[('pattern_mode', 'U64'),
                                        ('pattern_size', np.uint16),
                                        ('pattern_bins', np.uint16),
@@ -613,7 +626,8 @@ class Tetra3():
                                        ('simplify_pattern', bool),
                                        ('range_ra', np.float32, (2,)),
                                        ('range_dec', np.float32, (2,)),
-                                       ('presort_patterns', bool)])
+                                       ('presort_patterns', bool),
+                                       ('num_patterns', np.uint32)])
 
         self._logger.debug('Packed properties into: ' + str(props_packed))
         self._logger.debug('Saving as compressed numpy archive')
@@ -851,7 +865,7 @@ class Tetra3():
                           star_catalog='hip_main',
                           lattice_field_oversampling=100, patterns_per_lattice_field=50,
                           verification_stars_per_fov=150, star_max_magnitude=None,
-                          pattern_max_error=.002, range_ra=None, range_dec=None,
+                          pattern_max_error=.001, range_ra=None, range_dec=None,
                           presort_patterns=True, save_largest_edge=True,
                           multiscale_step=1.5, epoch_proper_motion='now',
                           pattern_stars_per_fov=None, simplify_pattern=None):
@@ -979,7 +993,7 @@ class Tetra3():
             pattern_max_error (float, optional): This value determines the number of bins into which
                 a pattern hash's edge ratios are each quantized:
                   pattern_bins = 0.25 / pattern_max_error
-                Default .002, corresponding to pattern_bins=125. For a database with limiting magnitude
+                Default .001, corresponding to pattern_bins=250. For a database with limiting magnitude
                 7, this yields a reasonable pattern hash collision rate.
             range_ra (tuple, optional): Tuple with the range (min_ra, max_ra) in degrees (0 to 360).
                 If set, only stars within the given right ascension will be kept in the database.
@@ -1265,7 +1279,7 @@ class Tetra3():
         # Create all patten hashes by calculating, sorting, and binning edge ratios; then compute
         # a table index hash from the pattern hash, and store the table index -> pattern mapping.
         self._logger.info('Start building catalogue.')
-        catalog_length = 2 * len(pattern_list)
+        catalog_length = 3 * len(pattern_list)
         # Determine type to make sure the biggest index will fit, create pattern catalogue
         max_index = np.max(np.array(pattern_list))
         if max_index <= np.iinfo('uint8').max:
@@ -1350,7 +1364,7 @@ class Tetra3():
         self._star_table = star_table
         self._star_catalog_IDs = star_catID
         self._pattern_catalog = pattern_catalog
-        self._pattern_cache_capacity = self._pattern_cache_size_fraction * pattern_catalog.shape[0] // 2
+        self._pattern_cache_capacity = self._pattern_cache_size_fraction * len(pattern_list)
         if save_largest_edge:
             self._pattern_largest_edge = pattern_largest_edge
         self._db_props['pattern_mode'] = 'edge_ratio'
@@ -1373,6 +1387,7 @@ class Tetra3():
         self._db_props['range_ra'] = range_ra
         self._db_props['range_dec'] = range_dec
         self._db_props['presort_patterns'] = presort_patterns
+        self._db_props['num_patterns'] = len(pattern_list)
         self._logger.debug(self._db_props)
 
         if save_as is not None:
@@ -1384,7 +1399,7 @@ class Tetra3():
     def solve_from_image(self, image, fov_estimate=None, fov_max_error=None,
                          match_radius=.01, match_threshold=1e-4,
                          solve_timeout=5000, target_pixel=None, target_sky_coord=None, distortion=0,
-                         return_matches=False, return_visual=False, match_max_error=None,
+                         return_matches=False, return_visual=False, match_max_error=.002,
                          pattern_checking_stars=None, **kwargs):
         """Solve for the sky location of an image.
 
@@ -1427,7 +1442,7 @@ class Tetra3():
             return_visual (bool, optional): If set to True, an image is returned that visualises
                 the solution.
             match_max_error (float, optional): Maximum difference allowed in pattern for a match.
-                Default is None, which uses the 'pattern_max_error' value from the database.
+                If None, uses the 'pattern_max_error' value from the database.
             pattern_checking_stars: No longer meaningful, ignored.
             **kwargs (optional): Other keyword arguments passed to
                 :meth:`tetra3.get_centroids_from_image`.
@@ -1520,7 +1535,7 @@ class Tetra3():
     def solve_from_centroids(self, star_centroids, size, fov_estimate=None, fov_max_error=None,
                              match_radius=.01, match_threshold=1e-4,
                              solve_timeout=5000, target_pixel=None, target_sky_coord=None, distortion=0,
-                             return_matches=False, return_visual=False, match_max_error=None,
+                             return_matches=False, return_visual=False, match_max_error=.002,
                              pattern_checking_stars=None):
         """Solve for the sky location using a list of centroids.
 
@@ -1574,7 +1589,7 @@ class Tetra3():
             return_visual (bool, optional): If set to True, an image is returned that visualises
                 the solution.
             match_max_error (float, optional): Maximum difference allowed in pattern for a match.
-                Default is None, which uses the 'pattern_max_error' value from the database.
+                If None, uses the 'pattern_max_error' value from the database.
             pattern_checking_stars: No longer meaningful, ignored.
 
         Returns:
@@ -1646,10 +1661,9 @@ class Tetra3():
         if fov_max_error is not None:
             fov_max_error = np.deg2rad(float(fov_max_error))
         match_radius = float(match_radius)
-        num_patterns = self.pattern_catalog.shape[0] // 2
-        match_threshold = float(match_threshold) / num_patterns
+        match_threshold = float(match_threshold) / self.num_patterns
         self._logger.debug('Set threshold to: ' + str(match_threshold) + ', have '
-                           + str(num_patterns) + ' patterns.')
+                           + str(self.num_patterns) + ' patterns.')
         if solve_timeout is not None:
             # Convert to seconds to match timestamp
             solve_timeout = float(solve_timeout) / 1000
@@ -1970,7 +1984,7 @@ class Tetra3():
                     # display mismatch probability in scientific notation
                     self._logger.debug("MATCH ACCEPTED")
                     self._logger.debug("Prob: %.4g, corr: %.4g"
-                                       % (prob_mismatch, prob_mismatch*num_patterns))
+                                       % (prob_mismatch, prob_mismatch*self.num_patterns))
 
                     # Get the vectors for all matches in the image using coarse fov
                     matched_image_centroids = image_centroids[matched_stars[:, 0], :]
@@ -2042,7 +2056,7 @@ class Tetra3():
                                      'FOV': np.rad2deg(fov), 'distortion': k,
                                      'RMSE': residual,
                                      'Matches': num_star_matches,
-                                     'Prob': prob_mismatch*num_patterns,
+                                     'Prob': prob_mismatch*self.num_patterns,
                                      'epoch_equinox': self._db_props['epoch_equinox'],
                                      'epoch_proper_motion': self._db_props['epoch_proper_motion'],
                                      'cache_hit_fraction': cache_hits / (cache_hits + cache_misses),
