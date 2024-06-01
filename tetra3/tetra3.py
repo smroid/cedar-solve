@@ -368,6 +368,7 @@ class Tetra3():
 
         self._logger.debug('Tetra3 Constructor called with load_database=' + str(load_database))
         self._star_table = None
+        self._star_kd_tree = None
         self._star_catalog_IDs = None
         self._pattern_catalog = None
         self._num_patterns = None
@@ -432,6 +433,12 @@ class Tetra3():
             - Apparent magnitude
         """
         return self._star_table
+
+    @property
+    def star_kd_tree(self):
+        """KDTree: KD tree of stars in the database.
+        """
+        return self._star_kd_tree
 
     @property
     def pattern_catalog(self):
@@ -519,7 +526,12 @@ class Tetra3():
         with np.load(path) as data:
             self._logger.debug('Loaded database, unpack files')
             self._pattern_catalog = data['pattern_catalog']
+
             self._star_table = data['star_table']
+            # Insert all stars in a KD-tree for fast neighbour lookup
+            all_star_vectors = self._star_table[:, 2:5]
+            self._star_kd_tree = KDTree(all_star_vectors)
+
             props_packed = data['props_packed']
             try:
                 self._pattern_largest_edge = data['pattern_largest_edge']
@@ -563,8 +575,8 @@ class Tetra3():
             self._db_props['min_fov'] = self._db_props['max_fov']
         self._num_patterns = self._db_props['num_patterns']
         self._pattern_cache_capacity = self._pattern_cache_size_fraction * self.num_patterns
-        self._logger.debug('Database pattern_max_error: %s' %
-                           self._db_props['pattern_max_error'])
+        self._logger.debug('Database properties %s' % self._db_props)
+
 
     def save_database(self, path):
         """Save database to file.
@@ -1272,8 +1284,7 @@ class Tetra3():
         pattern_list = list(pattern_list)
         self._logger.info('Found %s patterns in total.' % len(pattern_list))
 
-        # Don't need these anymore.
-        del vector_kd_tree
+        # Don't need this anymore.
         del pattern_kd_tree
 
         # Create all patten hashes by calculating, sorting, and binning edge ratios; then compute
@@ -1362,6 +1373,7 @@ class Tetra3():
             self._logger.info('Collisions: pattern hash %s, index %s, table %s' %
                               (pattern_hash_collisions, hash_index_collisions, table_collisions))
         self._star_table = star_table
+        self._star_kd_tree = vector_kd_tree
         self._star_catalog_IDs = star_catID
         self._pattern_catalog = pattern_catalog
         self._pattern_cache_capacity = self._pattern_cache_size_fraction * len(pattern_list)
@@ -2251,20 +2263,10 @@ class Tetra3():
         return (catalog_pattern_edges, catalog_pattern_vectors)
 
     def _get_nearby_stars(self, vector, radius):
-        """Get star indices within radius radians of the vector."""
-        # Stars must be within this cartesian cube
+        """Get star indices within radius radians of the vector. Sorted brightest first."""
         max_dist = _distance_from_angle(radius)
-        range_x = vector[0] + np.array([-max_dist, max_dist])
-        range_y = vector[1] + np.array([-max_dist, max_dist])
-        range_z = vector[2] + np.array([-max_dist, max_dist])
-        # Per axis, find where data is within the range, then combine
-        possible_x = (self.star_table[:, 2] > range_x[0]) & (self.star_table[:, 2] < range_x[1])
-        possible_y = (self.star_table[:, 3] > range_y[0]) & (self.star_table[:, 3] < range_y[1])
-        possible_z = (self.star_table[:, 4] > range_z[0]) & (self.star_table[:, 4] < range_z[1])
-        possible = np.nonzero(possible_x & possible_y & possible_z)[0]
-        # Find those within the given radius
-        nearby = np.dot(np.asarray(vector), self.star_table[possible, 2:5].T) > np.cos(radius)
-        return possible[nearby]
+        nearby = self._star_kd_tree.query_ball_point(vector, max_dist)
+        return np.sort(nearby)
 
     def _get_matched_star_data(self, centroid_data, star_indices):
         """Get dictionary of matched star data to return.
