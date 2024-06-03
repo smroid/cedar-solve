@@ -55,8 +55,6 @@ print('Start solving')
 iter_count = 0
 for center_vec in fibonacci_sphere_lattice(FOV_N):
     iter_count += 1
-    if iter_count % 1000 == 0:
-        print('iter %d' % iter_count)
 
     ra, dec = ra_dec_from_vector(center_vec)
     if ra < 0:
@@ -104,6 +102,10 @@ for center_vec in fibonacci_sphere_lattice(FOV_N):
             break  # Keep only NUM_CENT brightest centroids.
 
     solution = t3.solve_from_centroids(centroids, size = (HEIGHT, WIDTH), distortion=0)
+    if iter_count % 1000 == 0:
+        print('iter %d; solution for ra/dec %.4f/%.4f: %s' %
+              (iter_count, np.rad2deg(ra), np.rad2deg(dec), solution))
+
     if solution['RA'] is None:
         num_failures += 1
         continue
