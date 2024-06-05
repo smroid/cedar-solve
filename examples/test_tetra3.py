@@ -28,6 +28,7 @@ def draw_box(img_draw, centre, radius, **kwargs):
 # Pass `load_database=None` to not load a database (e.g. to build your own; see
 # generate_database.py example script).
 t3 = tetra3.Tetra3(load_database='default_database')
+# t3 = tetra3.Tetra3(load_database='database_60_90')
 
 # Select method used for star detection and centroiding. True for cedar-detect,
 # False for Tetra3.
@@ -39,6 +40,7 @@ if USE_CEDAR_DETECT:
 
 # Path where images are
 path = EXAMPLES_DIR / 'data' / 'medium_fov'
+# path = EXAMPLES_DIR / 'data' / 'large_fov'
 try:
     for impath in path.glob('*'):
         try:
@@ -77,8 +79,8 @@ try:
                     # down somewhat.
                     trimmed_centroids = centroids[:30]
                     solution = t3.solve_from_centroids(
-                        trimmed_centroids, (height, width), fov_estimate=None,
-                        match_threshold=1e-4, return_matches=True, solve_timeout=5000)
+                        trimmed_centroids, (height, width),
+                        return_matches=True, solve_timeout=5000)
 
                     if 'matched_centroids' in solution:
                         # Draw a green box around each matched star.
