@@ -30,3 +30,6 @@ tetra3/bin/cedar-detect-server
 # Databases except the default
 *.npz
 !**/default_database.npz
+
+# Emacs backup files.
+*~
