@@ -13,4 +13,7 @@ import tetra3
 t3 = tetra3.Tetra3(load_database=None)
 
 # Generate and save database.
-t3.generate_database(max_fov=30, min_fov=10, save_as='default_database')
+# t3.generate_database(max_fov=30, min_fov=10, save_as='default_database')
+t3.generate_database(max_fov=30, min_fov=10,
+                     lattice_field_oversampling=1000, patterns_per_lattice_field=1,
+                     save_as='default_database_thin1')
