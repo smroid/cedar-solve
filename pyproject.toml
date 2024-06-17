@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cedar-solve"
+version = "0.1.0"
+description = "A fast lost-in-space plate solver for star trackers. Forked from esa/tetra3."
+readme = "README.rst"
+authors = [{ name = "Steven Rosenthal" }]
+license = { file = "LICENSE.txt" }
+requires-python = ">=3.7"
+keywords = ["astronomy"]
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3 :: Only",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Astronomy",
+]
+
+dependencies = [
+    "numpy >= 1.21.1,<2",
+    "Pillow >= 8.3.1,<9",
+    'scipy >= 1.7.1,<2',
+]
+
+[project.urls]
+docs = "https://tetra3.readthedocs.io/en/latest/"
+Source = "https://github.com/smroid/cedar-solve"
+Issues = "https://github.com/smroid/cedar-solve/issues"
+Releases = "https://github.com/smroid/cedar-solve/releases"
+
+[project.optional-dependencies]
+cedar-detect = [
+    "grpcio",
+    "protobuf",
+]
+dev = [
+    "build",
+]
+docs = [
+    "sphinx",
+    "sphinx-rtd-theme",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"tetra3.data" = ["data/default_database.npz"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["tetra3*"]
+exclude = [
+    "tests",
+    "docs",
+    "scripts",
+    "examples",
+]

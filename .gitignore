@@ -2,8 +2,21 @@
 /docs/_*
 /docs/*.log
 
+# IDE
+.idea/
+.vscode/
+.devcontainer/
+
+# Local Development
+.venv/
+venv/
+.venv*/
+venv*/
+.python-version
+
 # Cache
 *__pycache__*
+*.pyc
 
 # Debug logs
 **/debug/*
@@ -16,6 +29,9 @@
 # Settings
 /setup.cfg
 
+# OS
+.DS_Store
+
 # Star catalogues
 tetra3/BSC5*
 tetra3/hip_main.dat
@@ -23,6 +39,7 @@ tetra3/tyc_main.dat
 
 # Output dirs
 examples/data/medium_fov/output
+!examples/data/medium_fov/output/.keep
 
 # We don't store the binary.
 tetra3/bin/cedar-detect-server
@@ -30,6 +47,7 @@ tetra3/bin/cedar-detect-server
 # Databases except the default
 *.npz
 !**/default_database.npz
+*.dat
 
 # Emacs backup files.
 *~

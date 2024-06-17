@@ -7,8 +7,7 @@ from multiprocessing import shared_memory
 import numpy as np
 from PIL import Image
 
-import cedar_detect_pb2
-import cedar_detect_pb2_grpc
+from tetra3 import cedar_detect_pb2, cedar_detect_pb2_grpc
 
 class CedarDetectClient():
     """Executes the cedar-detect-server binary as a subprocess. That binary is a

@@ -13,8 +13,8 @@ from pathlib import Path
 from time import perf_counter as precision_timestamp
 EXAMPLES_DIR = Path(__file__).parent
 
-import cedar_detect_client
 import tetra3
+from tetra3 import cedar_detect_client
 
 def draw_circle(img_draw, centre, radius, **kwargs):
     bbox = [centre[1] - radius, centre[0] - radius, centre[1] + radius, centre[0] + radius]
