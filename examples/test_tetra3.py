@@ -14,7 +14,6 @@ from time import perf_counter as precision_timestamp
 EXAMPLES_DIR = Path(__file__).parent
 
 import tetra3
-from tetra3 import cedar_detect_client
 
 def draw_circle(img_draw, centre, radius, **kwargs):
     bbox = [centre[1] - radius, centre[0] - radius, centre[1] + radius, centre[0] + radius]
@@ -30,13 +29,14 @@ def draw_box(img_draw, centre, radius, **kwargs):
 t3 = tetra3.Tetra3(load_database='default_database')
 # t3 = tetra3.Tetra3(load_database='database_60_90')
 
-# Select method used for star detection and centroiding. True for cedar-detect,
-# False for Tetra3.
-USE_CEDAR_DETECT = True
+# Use cedar_detect if we are able to load it.
+try:
+    from tetra3 import cedar_detect_client
+    cedar_detect = cedar_detect_client.CedarDetectClient()
+    USE_CEDAR_DETECT = True
+except:
+    USE_CEDAR_DETECT = False
 
-if USE_CEDAR_DETECT:
-    cedar_detect = cedar_detect_client.CedarDetectClient(
-        binary_path='../tetra3/bin/cedar-detect-server')
 
 # Path where images are
 path = EXAMPLES_DIR / 'data' / 'medium_fov'

@@ -36,6 +36,7 @@ Releases = "https://github.com/smroid/cedar-solve/releases"
 cedar-detect = [
     "grpcio",
     "protobuf",
+    "grpcio-tools",
 ]
 dev = [
     "build",

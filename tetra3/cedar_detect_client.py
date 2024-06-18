@@ -1,23 +1,37 @@
+from __future__ import annotations
 import logging
 import subprocess
 import time
+from pathlib import Path
+from typing import Union
 
 import grpc
 from multiprocessing import shared_memory
 import numpy as np
-from PIL import Image
 
 from tetra3 import cedar_detect_pb2, cedar_detect_pb2_grpc
 
-class CedarDetectClient():
+
+_bin_dir = Path(__file__).parent / "bin"
+
+
+class CedarDetectClient:
     """Executes the cedar-detect-server binary as a subprocess. That binary is a
     gRPC server described by the tetra3/proto/cedar_detect.proto file.
     """
 
-    def __init__(self, binary_path='bin/cedar-detect-server', port=50051):
+    def __init__(self, binary_path: Union[Path, str, None] = None, port=50051):
         """Spawns the cedar-detect-server subprocess.
+
+        Args:
+            binary_path: If you wish to specify a custom location for the `cedar-detect-server` binary you
+                may do so, otherwise the default is to search in the relative directory "./bin"
+            port: Customize the `cedar-detect-server` port if running multiple instances.
         """
-        self._binary_path = binary_path
+        self._binary_path: Path = Path(binary_path) if binary_path else _bin_dir / "cedar-detect-server"
+        if not self._binary_path.exists() or not self._binary_path.is_file():
+            raise ValueError(f"The cedar-detect-server binary could not be found at '{self._binary_path}'.")
+
         self._port = port
         self._subprocess = subprocess.Popen([self._binary_path, '--port', str(self._port)])
         time.sleep(2)
