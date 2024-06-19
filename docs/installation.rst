@@ -66,12 +66,28 @@ a free book on Git, and introductory videos is a good place to start.
 
 Installing from source
 ^^^^^^^^^^^^^^^^^^^^^^
-To install the package from source, open a command prompt or terminal in the tetra3 directory and
-run::
+Open a command prompt or terminal and navigate to the project repository root directory.
 
-    pip install .
+Create a virtual environment in the root of the repository to work in::
+
+    python -m venv .venv
+
+Activate the virtual environment::
+
+    # linux, macos
+    source .venv/bin/activate
+
+    # windows cmd
+    venv\Scripts\activate.bat
+
+    # windows powershell
+    venv\Scripts\Activate.ps1
+
+To install the project for local development::
+
+    pip install -e ".[dev,docs,cedar-detect]"
     
-This will install all dependencies and make the tetra3 module accessible from anywhere. You can
+This will install all dependencies into the virtual environment. You can
 test that it works by running the example::
 
     cd examples
