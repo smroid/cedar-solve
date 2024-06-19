@@ -124,6 +124,7 @@ TOO_FEW = 5
 
 _MAGIC_RAND = np.uint64(2654435761)
 _supported_databases = ('bsc5', 'hip_main', 'tyc_main')
+_lib_root = Path(__file__).parent
 
 def _insert_at_index(pattern, hash_index, table):
     """Inserts to table with quadratic probing. Returns table index where pattern was inserted
@@ -655,19 +656,13 @@ class Tetra3():
         np.savez_compressed(path, **to_save)
 
     @staticmethod
-    def _load_catalog(star_catalog, range_ra, range_dec, epoch_proper_motion, logger):
+    def _load_catalog(star_catalog, catalog_file_full_pathname, range_ra, range_dec, epoch_proper_motion, logger):
         """Loads the star catalog and returns at tuple of:
         star_table: an array of [ra, dec, 0, 0, 0, mag]
         star_catID: array of catalog IDs for the entries in star_table
         epoch_equinox: the epoch of the star catalog's celestial coordinate system.
         """
-        catalog_file_full_pathname = Path(__file__).parent / star_catalog
-        # Add .dat suffix for hip and tyc if not present
-        if star_catalog in ('hip_main', 'tyc_main') and not catalog_file_full_pathname.suffix:
-            catalog_file_full_pathname = catalog_file_full_pathname.with_suffix('.dat')
 
-        assert catalog_file_full_pathname.exists(), 'No star catalogue found at ' \
-                                                    + str(catalog_file_full_pathname)
         # Calculate number of star catalog entries:
         if star_catalog == 'bsc5':
             # See http://tdc-www.harvard.edu/catalogs/catalogsb.html
@@ -1044,8 +1039,8 @@ class Tetra3():
         # If True, measures and logs collisions (pattern hash, hash index and pattern table).
         EVALUATE_COLLISIONS = False
 
-        assert star_catalog in _supported_databases, 'Star catalogue name must be one of: ' \
-             + str(_supported_databases)
+        star_catalog, catalog_file_full_pathname = self._build_catalog_path(star_catalog)
+
         max_fov = np.deg2rad(float(max_fov))
         if min_fov is None:
             min_fov = max_fov
@@ -1080,7 +1075,13 @@ class Tetra3():
             raise ValueError('epoch_proper_motion value %s is forbidden' % epoch_proper_motion)
 
         star_table, star_catID, epoch_equinox = Tetra3._load_catalog(
-            star_catalog, range_ra, range_dec, epoch_proper_motion, self._logger)
+            star_catalog,
+            catalog_file_full_pathname,
+            range_ra,
+            range_dec,
+            epoch_proper_motion,
+            self._logger,
+        )
 
         if star_max_magnitude is None:
             # Compute the catalog magnitude cutoff based on the required star density.
@@ -2294,6 +2295,35 @@ class Tetra3():
             output['matched_catID'] = self.star_catalog_IDs[star_indices].tolist()
         return output
 
+    @staticmethod
+    def _build_catalog_path(star_catalog):
+        """ build the path to the star catalog and parse the catalog name
+        Args:
+            star_catalog (str or pathlib.Path, optional): the name or path to the star catalog file
+        Returns:
+            (tuple[str, pathlib.Path]): return the pure catalog name and the file path
+        """
+        if star_catalog in _supported_databases:
+            # only name supplied, assume file is adjacent to this code file
+            catalog_file_full_pathname = _lib_root / star_catalog
+        else:
+            # a path string or path object supplied, parse out the pure name
+            catalog_file_full_pathname = Path(star_catalog).expanduser()
+            star_catalog = catalog_file_full_pathname.name.rstrip(catalog_file_full_pathname.suffix)
+
+        if star_catalog not in _supported_databases:
+            raise ValueError(f"star_catalog name must be one of {_supported_databases}, got: {star_catalog}")
+
+        # Add .dat suffix for hip and tyc if not present
+        if star_catalog in ('hip_main', 'tyc_main') and not catalog_file_full_pathname.suffix:
+            catalog_file_full_pathname = catalog_file_full_pathname.with_suffix('.dat')
+
+        if not catalog_file_full_pathname.exists():
+            raise ValueError(f'No star catalogue found at {str(catalog_file_full_pathname)}')
+
+        return star_catalog, catalog_file_full_pathname
+
+
 def get_centroids_from_image(image, sigma=2, image_th=None, crop=None, downsample=None,
                              filtsize=25, bg_sub_mode='local_mean', sigma_mode='global_root_square',
                              binary_open=True, centroid_window=None, max_area=100, min_area=5,
@@ -2634,6 +2664,7 @@ def get_centroids_from_image(image, sigma=2, image_th=None, crop=None, downsampl
     if return_images:
         result.append(images_dict)
     return tuple(result)
+
 
 def crop_and_downsample_image(image, crop=None, downsample=None, sum_when_downsample=True,
                               return_offsets=False):
