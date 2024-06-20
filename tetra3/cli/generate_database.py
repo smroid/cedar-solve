@@ -14,7 +14,7 @@ import tetra3
 
 def _tuple_type(type_: type) -> Callable[[str], Tuple]:
     def _fn(value: str) -> Tuple:
-        string = value.removeprefix("(").removesuffix(")")
+        string = value.lstrip("(").rstrip(")")
         return tuple(type_(s.strip()) for s in string.split(","))
     return _fn
 
