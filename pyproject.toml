@@ -46,6 +46,9 @@ docs = [
     "sphinx-rtd-theme",
 ]
 
+[project.scripts]
+tetra3-gen-db = "tetra3.cli.generate_database:main"
+
 [tool.setuptools]
 include-package-data = true
 
