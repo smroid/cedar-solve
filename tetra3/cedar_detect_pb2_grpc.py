@@ -2,7 +2,7 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-from tetra3 import cedar_detect_pb2 as cedar__detect__pb2
+import cedar_detect_pb2 as cedar__detect__pb2
 
 
 class CedarDetectStub(object):

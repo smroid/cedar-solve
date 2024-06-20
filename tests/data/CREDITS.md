@@ -5,6 +5,10 @@
 
 ## Databases
 
+Note that BSC5, being limited to bright stars, is a small database which is convenient for testing. 
+However, it is not suitable for building pattern databases with fields of view smaller than 20 degrees. 
+Production users of Tetra3 should build their pattern databases from the 'hip_main' or 'tyc_main' catalogs.
+
 `bsc5` database file sourced from:
 
 http://tdc-www.harvard.edu/catalogs/bsc5.html
