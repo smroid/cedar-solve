@@ -3,7 +3,7 @@ Installation
 
 Getting Python
 --------------
-tetra3 is written for Python 3.7 or later (and therefore runs on almost any platform) and should
+Cedar-solve is written for Python 3.7 or later (and therefore runs on almost any platform) and should
 work with most modern Python 3 installations. There are many ways to get Python on your system.
 Most easily, by going to `the python webiste <https://www.python.org/>`_ and selecting your
 platform. On many operating systems Python is installed by default, but this can be a very old
@@ -12,9 +12,9 @@ command prompt or terminal window. You can also check ``python3 --version`` as i
 installed under this name. In the latter case, use ``python3`` and ``pip3`` in place of ``python``
 and ``pip`` in these instructions.
 
-Getting tetra3
+Getting Cedar-solve
 --------------
-tetra3 is not available on PyPI (the Python Package Index) yet. Instead you need to provide
+Cedar-solve is not available on PyPI (the Python Package Index) yet. Instead you need to provide
 a link to or download the GitHub source code.
 
 Use PIP to download and install
@@ -29,27 +29,27 @@ You can test that it works by running the example provided in the GitHub repo.
 Manually download source code
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Go to `the GitHub repository <https://github.com/smroid/cedar-solve>`_, click `Clone or Download` and
-`Download ZIP` and extract the tetra3 directory to where you want to use it. You can put this
+`Download ZIP` and extract the cedar-solve directory to where you want to use it. You can put this
 directly in your Python project as a module and use, or see below for how to install it.
 
 Use git to download and contribute to source code
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-To be able to easily download and contribute updates to tetra3 you should install Git. Follow the
+To be able to easily download and contribute updates to cedar-solve you should install Git. Follow the
 instructions for your platform `over here <https://git-scm.com/downloads>`_.
 
-Now open a terminal/CMD window in the directory where you wish to use tetra3 and clone the
+Now open a terminal/CMD window in the directory where you wish to use cedar-solve and clone the
 GitHib repository::
 
     git clone "https://github.com/smroid/cedar-solve.git"
 
-You should see the tetra3 directory created for you with all neccessary files. Check the status of
+You should see the cedar-solve directory created for you with all neccessary files. Check the status of
 your repository by typing::
 
-    cd tetra3
+    cd cedar-solve
     git status
 
 which should tell you that you are on the branch "master" and are up to date with the origin (which
-is the GitHub version of tetra3). If a new update has come to GitHub you can update yourself by
+is the GitHub version of cedar-solve). If a new update has come to GitHub you can update yourself by
 typing::
 
     git pull
@@ -102,7 +102,7 @@ You can run the automated test suite with this command (from the repository root
     # skip slow tests
     pytest -m "not slow"
 
-Using tetra3 as a module in your repository
+Using cedar-solve as a module in your repository
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 A specific branch named `no_big_files` is available for practical inclusion as a git submodule
 in your own repository. This does not include the default database and example images, making
