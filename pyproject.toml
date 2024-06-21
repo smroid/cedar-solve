@@ -39,6 +39,7 @@ cedar-detect = [
     "grpcio-tools",
 ]
 dev = [
+
     "pytest",
     "build",
 ]

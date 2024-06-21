@@ -4,8 +4,13 @@ tetra3: A fast lost-in-space plate solver for star trackers.
 
 Use it to identify stars in images and get the corresponding direction (i.e. right ascension and
 declination) in the sky which the camera points to. The only thing tetra3 needs to know is the
-approximate field of view of your camera. tetra3 also includes a versatile function to find spot
-centroids and statistics.
+approximate field of view of your camera.
+
+tetra3 also includes a versatile function to find spot centroids and statistics.
+Alternately, you can also use another star detection/centroiding library in conjunction
+with tetra3 plate solving. Cedar Detect (https://github.com/smroid/cedar-detect) is a high
+performance solution for this; see cedar_detect_client.py for a way to use tetra3 with
+Cedar Detect.
 
 Included in the package:
 
@@ -22,34 +27,47 @@ The class :class:`tetra3.Tetra3` has three main methods for solving images:
 A default database (named `default_database`) is included in the repo, it is built for a field of
 view range of 10 to 30 degrees with stars up to magnitude 8.
 
-It is critical to set up the centroid extraction parameters (see :meth:`get_centroids_from_image`
-to reliably return star centroids from a given image. After this is done, pass the same keyword
-arguments to :meth:`Tetra3.solve_from_image` to use them when solving your images.
-
 Note:
     If you wish to build you own database (typically for a different field-of-view) you must
     download a star catalogue. tetra3 supports three options:
 
     * The 285KB Yale Bright Star Catalog 'BSC5' containing 9,110 stars. This is complete to
-      to about magnitude seven and is sufficient for >10 deg field-of-view setups.
+      to about magnitude seven and is sufficient for >20 deg field-of-view setups.
     * The 51MB Hipparcos Catalogue 'hip_main' containing 118,218 stars. This contains about
-      three stars per square degree and is sufficient down to about >3 deg field-of-view.
+      three stars per square degree and is sufficient down to about >10 deg field-of-view.
     * The 355MB Tycho Catalogue 'tyc_main' (also from the Hipparcos satellite mission)
-      containing 1,058,332 stars. This is complete to magnitude 10 and is sufficient for all
-      tetra3 databases.
+      containing 1,058,332 stars, around 25 per square degree. This is complete to
+      magnitude 10 and is sufficient down to about >3 deg field-of-view.
+
     The 'BSC5' data is avaiable from <http://tdc-www.harvard.edu/catalogs/bsc5.html> (use
     byte format file) and 'hip_main' and 'tyc_main' are available from
     <https://cdsarc.u-strasbg.fr/ftp/cats/I/239/> (save the appropriate .dat file). The
     downloaded catalogue must be placed in the tetra3/tetra3 directory.
 
-This is Free and Open-Source Software based on `Tetra` rewritten by Gustav Pettersson at ESA,
-with further improvements by Steven Rosenthal.
+Cedar Solve is Free and Open-Source Software based on `Tetra` rewritten by Gustav
+Pettersson at ESA, with further improvements by Steven Rosenthal.
 
 The original software is due to:
 J. Brown, K. Stubis, and K. Cahoy, "TETRA: Star Identification with Hash Tables",
 Proceedings of the AIAA/USU Conference on Small Satellites, 2017.
 <https://digitalcommons.usu.edu/smallsat/2017/all2017/124/>
 <github.com/brownj4/Tetra>
+
+Cedar Solve license:
+    Copyright 2023 Steven Rosenthal smr@dt3.org
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        https://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
 
 tetra3 license:
     Copyright 2019 the European Space Agency
@@ -65,6 +83,7 @@ tetra3 license:
     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
     See the License for the specific language governing permissions and
     limitations under the License.
+
 
 Original Tetra license notice:
     Copyright (c) 2016 brownj4
@@ -86,6 +105,7 @@ Original Tetra license notice:
     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE.
+
 """
 
 # Standard imports:
@@ -313,7 +333,8 @@ class Tetra3():
 
     Star locations (centroids) are found using :meth:`tetra3.get_centroids_from_image`, use one of
     your images to find settings which work well for your images. Then pass those settings as
-    keyword arguments to :meth:`solve_from_image`.
+    keyword arguments to :meth:`solve_from_image`. Alternately, you can use Cedar Detect for
+    detecting and centroiding stars in your images.
 
     Example 1: Load database and solve image
         ::
@@ -345,7 +366,8 @@ class Tetra3():
             database patterns.
 
     """
-    def __init__(self, load_database='default_database', debug_folder=None, pattern_cache_size_fraction=.05):
+    def __init__(self, load_database='default_database',
+                 debug_folder=None, pattern_cache_size_fraction=.05):
         # Logger setup
         self._debug_folder = None
         self._logger = logging.getLogger('tetra3.Tetra3')
@@ -1866,11 +1888,13 @@ class Tetra3():
                         # Distortion is known, set variables and estimate FOV
                         image_centroids_undist = image_centroids
                     else:
-                        # Calculate the (coarse) distortion by comparing pattern to the min/max distorted patterns
+                        # Calculate the (coarse) distortion by comparing pattern to the min/max
+                        # patterns
                         edge_ratio_errors_preundist = all_catalog_edge_ratios[index] - image_pattern_edge_ratio_preundist
                         # Now find the two indices in preundist that are closest to the real distortion
                         if len(distortion_range) > 2:
-                            # If there are more than 2 preundistortions, select the two closest ones for interpolation
+                            # If there are more than 2 preundistortions, select the two closest ones
+                            # for interpolation
                             rmserr = np.sum(edge_ratio_errors_preundist**2, axis=1)
                             closest = np.argmin(rmserr)
                             if closest == 0:
@@ -1896,11 +1920,14 @@ class Tetra3():
                             high_ind = 1
                         # How far do we need to go from low to high to reach zero
                         x = np.mean(edge_ratio_errors_preundist[low_ind, :] /
-                                    (edge_ratio_errors_preundist[low_ind, :] - edge_ratio_errors_preundist[high_ind, :]))
+                                    (edge_ratio_errors_preundist[low_ind, :] -
+                                     edge_ratio_errors_preundist[high_ind, :]))
                         # Distortion k estimate
-                        dist_est = distortion_range[low_ind] + x*(distortion_range[high_ind] - distortion_range[low_ind])
+                        dist_est = distortion_range[low_ind] + x*(distortion_range[high_ind] -
+                                                                  distortion_range[low_ind])
                         # Undistort centroid pattern with estimate
-                        image_centroids_undist = _undistort_centroids(image_centroids, (height, width), k=dist_est)
+                        image_centroids_undist = _undistort_centroids(
+                            image_centroids, (height, width), k=dist_est)
 
                     # Estimate coarse FOV from the pattern
                     catalog_largest_edge = all_catalog_largest_edges[index]
@@ -1913,10 +1940,12 @@ class Tetra3():
                             # The FOV estimate will be the same for each attempt with this pattern
                             # so we can cache the value by checking if we have already set it
                             if pattern_largest_distance is None:
-                                pattern_largest_distance = np.max(pdist(image_centroids_undist[image_pattern_indices, :]))
+                                pattern_largest_distance = np.max(
+                                    pdist(image_centroids_undist[image_pattern_indices, :]))
                         else:
                             # If distortion is allowed to vary, we need to calculate this every time
-                            pattern_largest_distance = np.max(pdist(image_centroids_undist[image_pattern_indices, :]))
+                            pattern_largest_distance = np.max(
+                                pdist(image_centroids_undist[image_pattern_indices, :]))
                         f = pattern_largest_distance / 2 / np.tan(catalog_largest_edge/2)
                         fov = 2*np.arctan(width/2/f)
 
@@ -2026,7 +2055,8 @@ class Tetra3():
                         # Accurately calculate the FOV and distortion by looking at the angle from boresight
                         # on all matched catalogue vectors and all matched image centroids
                         matched_catalog_vectors_derot = np.dot(rotation_matrix, matched_catalog_vectors.T).T
-                        tangent_matched_catalog_vectors = norm(matched_catalog_vectors_derot[:, 1:], axis=1) \
+                        tangent_matched_catalog_vectors = norm(
+                            matched_catalog_vectors_derot[:, 1:], axis=1) \
                             /matched_catalog_vectors_derot[:, 0]
                         # Get the (distorted) pixel distance from image centre for all matches
                         # (scaled relative to width/2)
@@ -2359,8 +2389,8 @@ def get_centroids_from_image(image, sigma=2, image_th=None, crop=None, downsampl
 
            - 'local_median': Create the background image using a median filter of
              size `filtsize` and subtract pixelwise.
-           - 'local_mean' (the default): Create the background image using a mean filter of size `filtsize` and
-             subtract pixelwise.
+           - 'local_mean' (the default): Create the background image using a mean filter of size
+             `filtsize` and subtract pixelwise.
            - 'global_median': Subtract the median value of all pixels from each pixel.
            - 'global_mean': Subtract the mean value of all pixels from each pixel.
 
