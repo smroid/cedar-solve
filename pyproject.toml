@@ -39,6 +39,8 @@ cedar-detect = [
     "grpcio-tools",
 ]
 dev = [
+
+    "pytest",
     "build",
 ]
 docs = [
@@ -60,4 +62,12 @@ exclude = [
     "docs",
     "scripts",
     "examples",
+]
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests",
+]
+markers = [
+    "slow: These tests are slow (deselect with '-m \"not slow\"')",
 ]
