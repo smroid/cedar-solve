@@ -95,6 +95,13 @@ test that it works by running the example::
     
 which should print out the solutions for the included test images.
 
+You can run the automated test suite with this command (from the repository root dir)::
+
+    pytest
+
+    # skip slow tests
+    pytest -m "not slow"
+
 Using tetra3 as a module in your repository
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 A specific branch named `no_big_files` is available for practical inclusion as a git submodule
