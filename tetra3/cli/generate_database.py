@@ -85,9 +85,6 @@ def main():
                              "If 'now' (default), the current year is used. If 'none', star motions "
                              "are not propagated and this allows catalogue entries without proper "
                              "motions to be used in the database.")
-    parser.add_argument("--pattern-stars-per-fov", type=int,
-                        help="Deprecated. If given, is used instead of `lattice_field_oversampling`, "
-                             "which has similar values.")
 
     args = parser.parse_args()
 
