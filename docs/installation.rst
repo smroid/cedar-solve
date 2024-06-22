@@ -3,7 +3,7 @@ Installation
 
 Getting Python
 --------------
-Cedar-solve is written for Python 3.7 or later (and therefore runs on almost any platform) and should
+Cedar-solve is written for Python 3.8 or later (and therefore runs on almost any platform) and should
 work with most modern Python 3 installations. There are many ways to get Python on your system.
 Most easily, by going to `the python webiste <https://www.python.org/>`_ and selecting your
 platform. On many operating systems Python is installed by default, but this can be a very old
@@ -14,23 +14,25 @@ and ``pip`` in these instructions.
 
 Getting Cedar-solve
 --------------
-Cedar-solve is not available on PyPI (the Python Package Index) yet. Instead you need to provide
-a link to or download the GitHub source code.
+Cedar-solve is available on PyPI (the Python Package Index). You may install it by::
 
-Use PIP to download and install
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-The easiest method is to let PIP download from GitHub and install. This will set up all
-dependencies and make the package usable from anywhere.::
+    pip install cedar-solve
 
-    pip install git+https://github.com/smroid/cedar-solve.git
+You can test that it works by invoking the database generator command::
 
-You can test that it works by running the example provided in the GitHub repo.
+    tetra3-gen-db --help
 
 Manually download source code
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Go to `the GitHub repository <https://github.com/smroid/cedar-solve>`_, click `Clone or Download` and
-`Download ZIP` and extract the cedar-solve directory to where you want to use it. You can put this
-directly in your Python project as a module and use, or see below for how to install it.
+You have two options to manually download the source code.
+
+1. Download the release of your choice by going to `GitHub Releasess <https://github.com/smroid/cedar-solve/releases>`_
+and downloading the `Source Code` archive in your preferred format.
+
+2. Download the latest code from the `GitHub repository <https://github.com/smroid/cedar-solve>`_. Click `Clone or Download` and
+`Download ZIP`
+
+Afterward you can extract the cedar-solve directory to where you want to use it.
 
 Use git to download and contribute to source code
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -97,16 +99,11 @@ which should print out the solutions for the included test images.
 
 You can run the automated test suite with this command (from the repository root dir)::
 
+    # run all tests
     pytest
 
     # skip slow tests
     pytest -m "not slow"
-
-Using cedar-solve as a module in your repository
-
-A specific branch named `no_big_files` is available for practical inclusion as a git submodule
-in your own repository. This does not include the default database and example images, making
-it less than 1 MB. For a specific application you probably want a custom database anyway.
 
 If problems arise
 -----------------
