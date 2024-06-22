@@ -5,7 +5,7 @@ Getting Python
 --------------
 Cedar-solve is written for Python 3.8 or later (and therefore runs on almost any platform) and should
 work with most modern Python 3 installations. There are many ways to get Python on your system.
-Most easily, by going to `the python webiste <https://www.python.org/>`_ and selecting your
+Most easily, by going to `the python website <https://www.python.org/>`_ and selecting your
 platform. On many operating systems Python is installed by default, but this can be a very old
 version (often 2.7). Check if you have something installed by running ``python --version`` in a
 command prompt or terminal window. You can also check ``python3 --version`` as it is sometimes
@@ -30,7 +30,7 @@ Manually download source code
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 You have two options to manually download the source code.
 
-1. Download the release of your choice by going to `GitHub Releasess <https://github.com/smroid/cedar-solve/releases>`_
+1. Download the release of your choice by going to `GitHub Releases <https://github.com/smroid/cedar-solve/releases>`_
 and downloading the `Source Code` archive in your preferred format.
 
 2. Download the latest code from the `GitHub repository <https://github.com/smroid/cedar-solve>`_. Click `Clone or Download` and
@@ -48,7 +48,7 @@ GitHib repository::
 
     git clone "https://github.com/smroid/cedar-solve.git"
 
-You should see the cedar-solve directory created for you with all neccessary files. Check the status of
+You should see the cedar-solve directory created for you with all necessary files. Check the status of
 your repository by typing::
 
     cd cedar-solve
