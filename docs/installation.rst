@@ -13,7 +13,7 @@ installed under this name. In the latter case, use ``python3`` and ``pip3`` in p
 and ``pip`` in these instructions.
 
 Getting Cedar-solve
---------------
+-------------------
 Cedar-solve is available on PyPI (the Python Package Index). You may install it by::
 
     pip install cedar-solve
@@ -21,6 +21,10 @@ Cedar-solve is available on PyPI (the Python Package Index). You may install it 
 You can test that it works by invoking the database generator command::
 
     tetra3-gen-db --help
+
+Example
+^^^^^^^
+An `example <https://github.com/smroid/cedar-solve/blob/master/examples/test_tetra3.py>`_ is available on the GitHub repository showing some ways of working with the library.
 
 Manually download source code
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
