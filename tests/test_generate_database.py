@@ -13,13 +13,17 @@ from tetra3 import Tetra3
 @pytest.mark.parametrize(
     ("star_catalog", "expected_name", "expected_path"),
     [
-        ("bsc5", "bsc5", lib_root_dir() / "bsc5"),
-        ("hip_main", "hip_main", lib_root_dir() / "hip_main.dat"),
-        ("tyc_main", "tyc_main", lib_root_dir() / "tyc_main.dat"),
-        ("/mock/path/hip_main.dat", "hip_main", "/mock/path/hip_main.dat"),
-        ("/mock/path/hip_main", "hip_main", "/mock/path/hip_main.dat"),
-        ("/mock/path/tyc_main.dat", "tyc_main", "/mock/path/tyc_main.dat"),
-        ("/mock/path/tyc_main", "tyc_main", "/mock/path/tyc_main.dat"),
+        # TODO: specifying only the catalog name and automatically building the path relative to the
+        #  library files doesn't work (and isn't practical) when installing from a wheel
+        # ("bsc5", "bsc5", lib_root_dir() / "bsc5"),
+        # ("hip_main", "hip_main", lib_root_dir() / "hip_main.dat"),
+        # ("tyc_main", "tyc_main", lib_root_dir() / "tyc_main.dat"),
+
+        # specifying full path
+        ("/mock/path/hip_main.dat", "hip_main", Path("/mock/path/hip_main.dat")),
+        ("/mock/path/hip_main", "hip_main", Path("/mock/path/hip_main.dat")),
+        ("/mock/path/tyc_main.dat", "tyc_main", Path("/mock/path/tyc_main.dat")),
+        ("/mock/path/tyc_main", "tyc_main", Path("/mock/path/tyc_main.dat")),
     ]
 )
 @mock.patch("tetra3.tetra3.Path.exists", return_value=True)

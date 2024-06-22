@@ -1,0 +1,54 @@
+name: Create Draft Release
+
+on:
+  push:
+    tags:
+      - "*.*.*"
+
+jobs:
+  release-draft:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    name: Create Draft Release
+    steps:
+      - name: Get Version Tag
+        id: vars
+        run: echo "tag=${GITHUB_REF#refs/*/}" >> $GITHUB_OUTPUT
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 'pyproject.toml'
+
+      - name: Check Version Strings
+        run: >
+          TAG=${{ steps.vars.outputs.tag }} 
+          python3 -m pip install toml 
+          && python3 scripts/validate-version.py --check-tag
+
+      - name: Build Wheel & Source
+        run: >
+          python3 -m pip install -U build twine 
+          && python3 -m build 
+          && twine check dist/**
+
+      - name: Draft Release
+        # https://github.com/release-drafter/release-drafter
+        uses: release-drafter/release-drafter@v5
+        with:
+          tag: ${{ steps.vars.outputs.tag }}
+          version: ${{ steps.vars.outputs.tag }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Release Asset
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload --clobber ${{ steps.vars.outputs.tag }} ./dist/*

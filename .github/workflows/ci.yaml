@@ -1,0 +1,114 @@
+name: Continuous Integration
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [ master ]
+    # don't run when pushing tags
+    tags-ignore: [ "*" ]
+
+jobs:
+
+  # ----------------------------------------------------------------------------
+  # Build documentation --------------------------------------------------------
+  docs:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+
+    name: Check Docs Build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Setup Docs Dependencies
+        run: pip install -e ".[docs]"
+
+      - name: Check Docs Build
+        run: >
+          cd docs
+          && make html
+
+  # ----------------------------------------------------------------------------
+  # Cross Platform, Arch Build, Test -------------------------------------------
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+        os: [ macos-latest, macos-12, windows-latest, ubuntu-latest ]
+        include:
+          - os: macos-latest  # will be an arm mac
+            arch: arm64
+
+          - os: macos-12  # will be an intel mac
+            arch: x64
+
+          - os: windows-latest
+            arch: x64
+
+          - os: ubuntu-latest
+            arch: x64
+
+        exclude:
+          # Pillow 8.4.0 not supported for these configurations
+          - os: windows-latest
+            python-version: 3.11
+          - os: windows-latest
+            python-version: 3.12
+
+
+    runs-on: ${{ matrix.os }}
+
+    name: Check Wheels ${{ matrix.os }}.${{ matrix.arch }}.${{ matrix.python-version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: ${{ matrix.arch }}
+
+      - name: Install build dependencies
+        run: python -m pip install -U toml build twine
+
+      - name: Check Version Strings
+        run: python3 scripts/validate-version.py
+
+      - id: get-version
+        if: ${{ ! startsWith(matrix.os, 'windows') }}
+        run: python scripts/get-version.py >> "$GITHUB_OUTPUT"
+
+      - id: get-version-win
+        if: ${{ startsWith(matrix.os, 'windows') }}
+        run: python scripts/get-version.py >> "$ENV:GITHUB_OUTPUT"
+
+      - name: Check Build
+        run: >
+          python3 -m build --wheel
+          && twine check dist/**
+
+      - name: Save Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cedar-detect-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.python-version }}
+          path: ./dist/*.whl
+
+      - name: Install Wheel
+        if: ${{ ! startsWith(matrix.os, 'windows') }}
+        run: pip install --force-reinstall "dist/cedar_solve-${{ steps.get-version.outputs.version }}-py3-none-any.whl[dev,cedar-detect]"
+
+      - name: Install Wheel
+        if: ${{ startsWith(matrix.os, 'windows') }}
+        run: pip install --force-reinstall "dist/cedar_solve-${{ steps.get-version-win.outputs.version }}-py3-none-any.whl[dev,cedar-detect]"
+
+      - name: Unit Tests
+        run: pytest -v

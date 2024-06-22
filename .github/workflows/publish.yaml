@@ -1,0 +1,33 @@
+name: Publish
+
+on:
+  release:
+    types:
+      - published
+
+jobs:
+  pypi:
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+
+    environment:
+      name: pypi
+      url: https://pypi.org/p/cedar-solve
+
+    name: PyPi Publish
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Release Assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release download ${{ github.event.release.tag_name }} --dir dist -p "*.whl" -p "*.tar.gz"
+
+      # https://packaging.python.org/en/latest/guides/publishing-package-distribution-releases-using-github-actions-ci-cd-workflows
+      # trusted publishing workflow:
+      # https://docs.pypi.org/trusted-publishers/adding-a-publisher/
+      - name: Publish To PyPi
+        uses: pypa/gh-action-pypi-publish@v1.9.0
