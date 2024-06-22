@@ -108,3 +108,5 @@ You can run the automated test suite with this command (from the repository root
 If problems arise
 -----------------
 Please get in touch by `filing an issue <https://github.com/smroid/cedar-solve/issues>`_.
+
+You can also join the `Cedar Discord <https://discord.gg/xbDrUyXP>`_ server.
