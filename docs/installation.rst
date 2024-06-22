@@ -103,7 +103,7 @@ You can run the automated test suite with this command (from the repository root
     pytest -m "not slow"
 
 Using cedar-solve as a module in your repository
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 A specific branch named `no_big_files` is available for practical inclusion as a git submodule
 in your own repository. This does not include the default database and example images, making
 it less than 1 MB. For a specific application you probably want a custom database anyway.
