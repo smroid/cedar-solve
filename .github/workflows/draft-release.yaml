@@ -29,9 +29,10 @@ jobs:
 
       - name: Check Version Strings
         run: >
-          TAG=${{ steps.vars.outputs.tag }}
           python3 -m pip install toml
           && python3 scripts/validate-version.py --check-tag
+        env:
+          TAG: ${{ steps.vars.outputs.tag }}
 
       - name: Build Wheel & Source
         run: >
