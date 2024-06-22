@@ -9,7 +9,7 @@ description = "A fast lost-in-space plate solver for star trackers. Forked from 
 readme = "README.rst"
 authors = [{ name = "Steven Rosenthal" }]
 license = { file = "LICENSE.txt" }
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 keywords = ["astronomy"]
 classifiers = [
     "License :: OSI Approved :: Apache Software License",
@@ -36,12 +36,11 @@ Releases = "https://github.com/smroid/cedar-solve/releases"
 cedar-detect = [
     "grpcio",
     "protobuf",
-    "grpcio-tools",
 ]
 dev = [
-
     "pytest",
     "build",
+    "grpcio-tools",
 ]
 docs = [
     "sphinx",
@@ -55,7 +54,7 @@ tetra3-gen-db = "tetra3.cli.generate_database:main"
 include-package-data = true
 
 [tool.setuptools.package-data]
-"tetra3.data" = ["data/default_database.npz"]
+"tetra3.data" = ["default_database.npz"]
 
 [tool.setuptools.packages.find]
 where = ["."]
