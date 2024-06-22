@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cedar-solve"
-version = "0.1.0"
+version = "0.5.1"
 description = "A fast lost-in-space plate solver for star trackers. Forked from esa/tetra3."
 readme = "README.rst"
 authors = [{ name = "Steven Rosenthal" }]

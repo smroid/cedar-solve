@@ -17,11 +17,11 @@ master_doc = 'index'
 # -- Project information -----------------------------------------------------
 
 project = 'tetra3'
-copyright = '2019 the European Space Agency'
-author = 'Gustav Pettersson @ ESA'
+copyright = '2023 Steven Rosenthal; 2019 the European Space Agency'
+author = 'Steven Rosenthal; Gustav Pettersson @ ESA'
 
 # The full version, including alpha/beta/rc tags
-release = '0.1.0'
+release = '0.5.1'
 
 # -- General configuration ---------------------------------------------------
 # Add any Sphinx extension module names here, as strings. They can be
