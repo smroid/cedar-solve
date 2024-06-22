@@ -1,0 +1,18 @@
+# configuration template for creating a draft GitHub release.
+# see draft-release.yaml for action step.
+# docs:
+# https://github.com/release-drafter/release-drafter
+name-template: 'Release $RESOLVED_VERSION'
+categories:
+  - title: 'Features'
+    label: 'enhancement'
+  - title: 'Bug Fixes'
+    label: 'bug'
+  - title: 'Maintenance'
+    label: 'chore'
+change-template: '- $TITLE @$AUTHOR (#$NUMBER)'
+change-title-escapes: '\<*_&'
+template: |
+  ## Changes
+
+  $CHANGES
