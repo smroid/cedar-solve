@@ -31,7 +31,7 @@ t3 = tetra3.Tetra3(load_database='default_database')
 
 # Use cedar_detect if we are able to load it.
 try:
-    import cedar_detect_client
+    from tetra3 import cedar_detect_client
     cedar_detect = cedar_detect_client.CedarDetectClient()
     USE_CEDAR_DETECT = True
 except Exception as e:
