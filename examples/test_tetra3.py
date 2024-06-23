@@ -5,7 +5,8 @@ tetra3/examples/data/medium_fov directory.
 
 import os
 import sys
-sys.path.append('..')
+
+print("path %s" % sys.path)
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -27,14 +28,14 @@ def draw_box(img_draw, centre, radius, **kwargs):
 # Pass `load_database=None` to not load a database (e.g. to build your own; see
 # generate_database.py example script).
 t3 = tetra3.Tetra3(load_database='default_database')
-# t3 = tetra3.Tetra3(load_database='database_60_90')
 
 # Use cedar_detect if we are able to load it.
 try:
-    from tetra3 import cedar_detect_client
+    import cedar_detect_client
     cedar_detect = cedar_detect_client.CedarDetectClient()
     USE_CEDAR_DETECT = True
-except:
+except Exception as e:
+    print("WARNING: could not setup Cedar Detect client: %s" % e);
     USE_CEDAR_DETECT = False
 
 
@@ -53,7 +54,7 @@ try:
                     centroids = cedar_detect.extract_centroids(
                         np_image, sigma=8, max_size=10, use_binned=True)
                 else:
-                    centroids = tetra3.get_centroids_from_image(np_image, downsample=2)
+                    centroids = tetra3.get_centroids_from_image(np_image)
                 t_extract = (precision_timestamp() - t0)*1000
 
                 basename = os.path.basename(impath)
