@@ -9,7 +9,7 @@ import grpc
 from multiprocessing import shared_memory
 import numpy as np
 
-import cedar_detect_pb2, cedar_detect_pb2_grpc
+from tetra3 import cedar_detect_pb2, cedar_detect_pb2_grpc
 
 
 _bin_dir = Path(__file__).parent / "bin"
