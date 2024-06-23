@@ -132,8 +132,8 @@ from scipy.spatial.distance import pdist, cdist
 from PIL import Image, ImageDraw
 
 # Local imports.
-from breadth_first_combinations import breadth_first_combinations
-from fov_util import fibonacci_sphere_lattice, num_fields_for_sky, separation_for_density
+from tetra3.breadth_first_combinations import breadth_first_combinations
+from tetra3.fov_util import fibonacci_sphere_lattice, num_fields_for_sky, separation_for_density
 
 # Status codes returned by solve_from_image() and solve_from_centroids()
 MATCH_FOUND = 1
