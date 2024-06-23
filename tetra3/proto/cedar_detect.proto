@@ -5,8 +5,8 @@ import "google/protobuf/duration.proto";
 // This is a copy of cedar_detect.proto from the smroid/cedar-detect project on
 // github. TODO(smr): avoid this copy.
 
-// In 'tetra3/tetra3' dir:
-// python -m grpc_tools.protoc -I=proto --python_out=. --pyi_out=. --grpc_python_out=. proto/cedar_detect.proto
+// In top-level dir:
+// python scripts/compile_proto.py
 
 package cedar_detect;
 

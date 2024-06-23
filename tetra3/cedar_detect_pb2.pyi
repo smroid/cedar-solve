@@ -7,7 +7,7 @@ from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Map
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class CentroidsRequest(_message.Message):
-    __slots__ = ["input_image", "sigma", "max_size", "return_binned", "use_binned_for_star_candidates", "detect_hot_pixels"]
+    __slots__ = ("input_image", "sigma", "max_size", "return_binned", "use_binned_for_star_candidates", "detect_hot_pixels")
     INPUT_IMAGE_FIELD_NUMBER: _ClassVar[int]
     SIGMA_FIELD_NUMBER: _ClassVar[int]
     MAX_SIZE_FIELD_NUMBER: _ClassVar[int]
@@ -23,7 +23,7 @@ class CentroidsRequest(_message.Message):
     def __init__(self, input_image: _Optional[_Union[Image, _Mapping]] = ..., sigma: _Optional[float] = ..., max_size: _Optional[int] = ..., return_binned: bool = ..., use_binned_for_star_candidates: bool = ..., detect_hot_pixels: bool = ...) -> None: ...
 
 class CentroidsResult(_message.Message):
-    __slots__ = ["noise_estimate", "hot_pixel_count", "peak_star_pixel", "star_candidates", "binned_image", "algorithm_time"]
+    __slots__ = ("noise_estimate", "hot_pixel_count", "peak_star_pixel", "star_candidates", "binned_image", "algorithm_time")
     NOISE_ESTIMATE_FIELD_NUMBER: _ClassVar[int]
     HOT_PIXEL_COUNT_FIELD_NUMBER: _ClassVar[int]
     PEAK_STAR_PIXEL_FIELD_NUMBER: _ClassVar[int]
@@ -39,7 +39,7 @@ class CentroidsResult(_message.Message):
     def __init__(self, noise_estimate: _Optional[float] = ..., hot_pixel_count: _Optional[int] = ..., peak_star_pixel: _Optional[int] = ..., star_candidates: _Optional[_Iterable[_Union[StarCentroid, _Mapping]]] = ..., binned_image: _Optional[_Union[Image, _Mapping]] = ..., algorithm_time: _Optional[_Union[_duration_pb2.Duration, _Mapping]] = ...) -> None: ...
 
 class Image(_message.Message):
-    __slots__ = ["width", "height", "image_data", "shmem_name"]
+    __slots__ = ("width", "height", "image_data", "shmem_name")
     WIDTH_FIELD_NUMBER: _ClassVar[int]
     HEIGHT_FIELD_NUMBER: _ClassVar[int]
     IMAGE_DATA_FIELD_NUMBER: _ClassVar[int]
@@ -51,7 +51,7 @@ class Image(_message.Message):
     def __init__(self, width: _Optional[int] = ..., height: _Optional[int] = ..., image_data: _Optional[bytes] = ..., shmem_name: _Optional[str] = ...) -> None: ...
 
 class StarCentroid(_message.Message):
-    __slots__ = ["centroid_position", "brightness", "num_saturated"]
+    __slots__ = ("centroid_position", "brightness", "num_saturated")
     CENTROID_POSITION_FIELD_NUMBER: _ClassVar[int]
     BRIGHTNESS_FIELD_NUMBER: _ClassVar[int]
     NUM_SATURATED_FIELD_NUMBER: _ClassVar[int]
@@ -61,7 +61,7 @@ class StarCentroid(_message.Message):
     def __init__(self, centroid_position: _Optional[_Union[ImageCoord, _Mapping]] = ..., brightness: _Optional[float] = ..., num_saturated: _Optional[int] = ...) -> None: ...
 
 class ImageCoord(_message.Message):
-    __slots__ = ["x", "y"]
+    __slots__ = ("x", "y")
     X_FIELD_NUMBER: _ClassVar[int]
     Y_FIELD_NUMBER: _ClassVar[int]
     x: float
