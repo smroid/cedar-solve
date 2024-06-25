@@ -21,8 +21,8 @@ The focus of the Cedar-Solve fork is to make significant improvements to the
 Tetra3 system while maintaining compatibility. We expect the improvements made
 here to be merged back into the parent esa/tetra3 repository.
 
-See :ref:`migrating <../migrating>` for information on updating programs that
-use Tetra3 to use Cedar-Solve instead.
+See `migrating <https://github.com/smroid/cedar-solve/migrating.rst>`_ for
+information on updating programs that use Tetra3 to use Cedar-Solve instead.
 
 See `Issues <https://github.com/smroid/cedar-solve/issues>`_ for discussion of
 the problems being addressed in this Cedar-Solve fork.
