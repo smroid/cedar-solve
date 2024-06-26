@@ -10,8 +10,9 @@ Consider the program::
 
   ...
   t3 = Tetra3('default_database')
-  ...
-  solve_dict = t3.solve_from_image(img, fov_estimate=12.0)
+
+  ... # obtain image
+  solve_dict = t3.solve_from_image(image, fov_estimate=12.0)
   ...
 
 To switch to Cedar-solve, update your PYTHONPATH. For example, if you
@@ -60,9 +61,9 @@ application to split out the star centroiding from the plate solving::
 
   ...
   t3 = Tetra3('default_database')
-  ...
-  centroids = t3.get_centroids_from_image(img)
 
+  ... # obtain image
+  centroids = t3.get_centroids_from_image(image)
   solve_dict = t3.solve_from_centroids(centroids, fov_estimate=12.0)
   ...
 
@@ -80,3 +81,16 @@ Now copy the executable into your cedar-solve directory::
   cp /home/pi/projects/cedar-detect/target/release/cedar-detect-server \
     /home/pi/projects/cedar-solve/tetra3/bin
 
+Update your application::
+
+  from tetra3 import Tetra3, cedar_detect_client
+
+  ...
+  t3 = Tetra3('default_database')
+  cedar_detect = cedar_detect_client.CedarDetectClient()
+
+  ... # obtain image
+  centroids = cedar_detect.extract_centroids(
+    image, sigma=8, max_size=10, use_binned=True)
+  solve_dict = t3.solve_from_centroids(centroids, fov_estimate=12.0)
+  ...
