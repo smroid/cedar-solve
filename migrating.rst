@@ -94,3 +94,5 @@ Update your application::
     image, sigma=8, max_size=10, use_binned=True)
   solve_dict = t3.solve_from_centroids(centroids, fov_estimate=12.0)
   ...
+
+Done!
