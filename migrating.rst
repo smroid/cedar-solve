@@ -69,4 +69,14 @@ application to split out the star centroiding from the plate solving::
 Next, clone the `cedar-detect repo <https://github.com/smroid/cedar-detect>`_.
 
 You will need to build the Cedar-detect executable, so first install Rust
-at `https://www.rust-lang.org/tools/install`.
+using instructions at `https://www.rust-lang.org/tools/install`.
+
+Go to your clone of the cedar-detect repo, and build optimized::
+
+  cargo build --release
+
+Now copy the executable into your cedar-solve directory::
+
+  cp /home/pi/projects/cedar-detect/target/release/cedar-detect-server \
+    /home/pi/projects/cedar-solve/tetra3/bin
+
