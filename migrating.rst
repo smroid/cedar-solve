@@ -15,7 +15,7 @@ Consider the program::
   ...
 
 To switch to Cedar Solve, update your PYTHONPATH. For example, if you
-cloned the `cedar-solve repo<https://github.com/smroid/cedar-solve>`_
+cloned the `cedar-solve repo <https://github.com/smroid/cedar-solve>`_
 repo to /home/pi/projects/cedar-solve, then set::
 
   export PYTHONPATH=/home/pi/projects/cedar-solve/tetra3
