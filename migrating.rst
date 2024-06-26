@@ -31,3 +31,42 @@ Cedar-solve has many improvements:
 
 * More uniform solve times.
 
+* Uniform sky coverage and pattern density in database. This reduces
+  the occurrences of solve failures.
+
+* Smaller database file and in-memory footprint.
+
+* The 'pattern_checking_stars' argument to solve_from_image() is no
+  longer needed.
+
+
+Replacing Tetra's star detection/centroiding with Cedar-Detect
+==============================================================
+
+While migrating to Cedar-solve offers the advantages outlined above,
+adopting Cedar-detect for star detection and centroiding can further
+improve overall plate solving performance. Cedar-detect is:
+
+* Much faster than Tetra3's build-in star detection/centroiding.
+
+* More resistant to false positives. Tetra3 often finds lots of false
+  stars in illuminated foreground clutter, but Cedar-detect generally
+  finds only real stars in the sky.
+
+As a first step to switching to Cedar-detect, we first update our
+application to split out the star centroiding from the plate solving::
+
+  from tetra3 import Tetra3
+
+  ...
+  t3 = Tetra3('default_database')
+  ...
+  centroids = t3.get_centroids_from_image(img)
+
+  solve_dict = t3.solve_from_centroids(centroids, fov_estimate=12.0)
+  ...
+
+Next, clone the `cedar-detect repo <https://github.com/smroid/cedar-detect>`_.
+
+You will need to build the Cedar-detect executable, so first install Rust
+at `https://www.rust-lang.org/tools/install`.
