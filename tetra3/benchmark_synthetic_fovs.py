@@ -22,7 +22,8 @@ def _ra_dec_from_vector(vec):
     return (ra, dec)
 
 
-def benchmark_synthetic_fovs(width, height, fov_deg, num_fovs, num_centroids=20):
+def benchmark_synthetic_fovs(width, height, fov_deg, num_fovs,
+                             num_centroids=20, database='default_database'):
     """Synthesizes and solves star fields.
     width, height: pixel count of camera
     fov_deg: horizontal FOV, in degrees
@@ -56,7 +57,7 @@ def benchmark_synthetic_fovs(width, height, fov_deg, num_fovs, num_centroids=20)
     num_successes = 0
     num_failures = 0
 
-    t3 = tetra3.Tetra3(load_database='default_database')
+    t3 = tetra3.Tetra3(load_database=database)
 
     print('Start solving...')
     iter_count = 0
