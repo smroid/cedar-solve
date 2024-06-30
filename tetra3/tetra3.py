@@ -361,13 +361,9 @@ class Tetra3():
         debug_folder (pathlib.Path, optional): The folder for debug logging. If None (the default)
             debug logging will be disabled unless handlers have been added to the `tetra3.Tetra3`
             logger before creating the insance.
-        pattern_cache_size_fraction (float, optional): Determines the size of a cache used to
-            retain computed information for catalog patterns. Default is 5% of total number of
-            database patterns.
 
     """
-    def __init__(self, load_database='default_database',
-                 debug_folder=None, pattern_cache_size_fraction=.05):
+    def __init__(self, load_database='default_database', debug_folder=None):
         # Logger setup
         self._debug_folder = None
         self._logger = logging.getLogger('tetra3.Tetra3')
@@ -398,17 +394,6 @@ class Tetra3():
         self._pattern_largest_edge = None
         self._verification_catalog = None
         self._cancelled = False
-
-        # See _get_all_patterns_for_index(). During plate solves we need pattern star vectors and
-        # edge sizes, but this information is too large to store for all pattern_catalog entries.
-        # Instead we cache this information for recently examined catalog patterns, on the
-        # presumption that subsequent solves in the same area of the sky will likely need the same
-        # patterns.
-        self._pattern_cache = OrderedDict()
-        self._pattern_cache_size_fraction = pattern_cache_size_fraction
-        self._pattern_cache_capacity = 0  # Filled in when _pattern_catalog is set.
-        self._pattern_cache_hits = 0
-        self._pattern_cache_misses = 0
 
         self._db_props = {'pattern_mode': None, 'pattern_size': None, 'pattern_bins': None,
                           'pattern_max_error': None, 'max_fov': None, 'min_fov': None,
@@ -597,7 +582,6 @@ class Tetra3():
             self._logger.debug('No min_fov key, copy from max_fov')
             self._db_props['min_fov'] = self._db_props['max_fov']
         self._num_patterns = self._db_props['num_patterns']
-        self._pattern_cache_capacity = self._pattern_cache_size_fraction * self.num_patterns
         self._logger.debug('Database properties %s' % self._db_props)
 
 
@@ -1399,7 +1383,6 @@ class Tetra3():
         self._star_kd_tree = vector_kd_tree
         self._star_catalog_IDs = star_catID
         self._pattern_catalog = pattern_catalog
-        self._pattern_cache_capacity = self._pattern_cache_size_fraction * len(pattern_list)
         if save_largest_edge:
             self._pattern_largest_edge = pattern_largest_edge
         self._db_props['pattern_mode'] = 'edge_ratio'
@@ -1498,7 +1481,6 @@ class Tetra3():
                 - 'epoch_proper_motion': The epoch the database proper motions were propageted to.
                 - 'T_solve': Time spent searching for a match in milliseconds.
                 - 'T_extract': Time spent exctracting star centroids in milliseconds.
-                - 'cache_hit_fraction': How many pattern lookups were satisfied by the cache.
                 - 'RA_target': Right ascension in degrees of the pixel positions passed in
                   target_pixel. Not included if target_pixel=None (the default).
                 - 'Dec_target': Declination in degrees of the pixel positions in target_pixel.
@@ -1642,7 +1624,6 @@ class Tetra3():
                 - 'epoch_equinox': The celestial RA/Dec equinox reference epoch.
                 - 'epoch_proper_motion': The epoch the database proper motions were propageted to.
                 - 'T_solve': Time spent searching for a match in milliseconds.
-                - 'cache_hit_fraction': How many pattern lookups were satisfied by the cache.
                 - 'RA_target': Right ascension in degrees of the pixel positions passed in
                   target_pixel. Not included if target_pixel=None (the default). If a Kx2 array
                   of target_pixel was passed, this will be a length K list.
@@ -1732,8 +1713,7 @@ class Tetra3():
         if num_centroids < p_size:
             return {'RA': None, 'Dec': None, 'Roll': None, 'FOV': None, 'distortion': None,
                     'RMSE': None, 'Matches': None, 'Prob': None, 'epoch_equinox': None,
-                    'epoch_proper_motion': None, 'cache_hit_fraction': None, 'T_solve': 0,
-                    'status': TOO_FEW}
+                    'epoch_proper_motion': None, 'T_solve': 0, 'status': TOO_FEW}
 
         # Apply the same "cluster buster" thinning strategy as is used in database
         # construction.
@@ -1788,8 +1768,6 @@ class Tetra3():
         catalog_eval_count = 0
         image_patterns_evaluated = 0
         search_space_explored = 0
-        prev_pattern_cache_hits = self._pattern_cache_hits
-        prev_pattern_cache_misses = self._pattern_cache_misses
 
         # Try all `p_size` star combinations chosen from the image centroids, brightest first.
         self._logger.debug('Checking up to %d image patterns from %d pattern centroids.' %
@@ -2092,8 +2070,6 @@ class Tetra3():
 
                     # Solved in this time
                     t_solve = (precision_timestamp() - t0_solve)*1000
-                    cache_hits = self._pattern_cache_hits - prev_pattern_cache_hits
-                    cache_misses = self._pattern_cache_misses - prev_pattern_cache_misses
                     solution_dict = {'RA': ra, 'Dec': dec,
                                      'Roll': roll,
                                      'FOV': np.rad2deg(fov), 'distortion': k,
@@ -2102,7 +2078,6 @@ class Tetra3():
                                      'Prob': prob_mismatch*self.num_patterns,
                                      'epoch_equinox': self._db_props['epoch_equinox'],
                                      'epoch_proper_motion': self._db_props['epoch_proper_motion'],
-                                     'cache_hit_fraction': cache_hits / (cache_hits + cache_misses),
                                      'T_solve': t_solve,
                                      'status': MATCH_FOUND}
 
@@ -2238,8 +2213,7 @@ class Tetra3():
             (catalog_lookup_count, catalog_eval_count))
         return {'RA': None, 'Dec': None, 'Roll': None, 'FOV': None, 'distortion': None,
                 'RMSE': None, 'Matches': None, 'Prob': None, 'epoch_equinox': None,
-                'epoch_proper_motion': None, 'cache_hit_fraction': None, 'T_solve': t_solve,
-                'status': status}
+                'epoch_proper_motion': None, 'T_solve': t_solve, 'status': status}
 
     def cancel_solve(self):
         """Signal that a currently running solve_from_image() or solve_from_centroids() should
@@ -2252,20 +2226,10 @@ class Tetra3():
     def _get_all_patterns_for_index(
             self, hash_index, upper_tri_index, image_pattern_largest_edge, fov_estimate, fov_max_error):
         """Returns (edges, vectors) for all pattern table entries for `hash_index`."""
-        val = self._pattern_cache.pop(hash_index, None)
-        if val is not None:
-            self._pattern_cache_hits += 1
-            self._pattern_cache[hash_index] = val  # Reinsert as most recently used.
-            return val
-
-        self._pattern_cache_misses += 1
-        while len(self._pattern_cache) > self._pattern_cache_capacity:
-            self._pattern_cache.popitem(last=False)  # Discard least recently used.
 
         # Iterate over table hash indices.
         hash_match_inds = _get_table_indices_from_hash(hash_index, self.pattern_catalog)
         if len(hash_match_inds) == 0:
-            self._pattern_cache[hash_index] = (None, None)
             return (None, None)
 
         if self.pattern_largest_edge is not None \
@@ -2277,7 +2241,6 @@ class Tetra3():
             keep = abs(fov2 - fov_estimate) < fov_max_error
             hash_match_inds = hash_match_inds[keep]
             if len(hash_match_inds) == 0:
-                self._pattern_cache[hash_index] = (None, None)
                 return (None, None)
         catalog_matches = self.pattern_catalog[hash_match_inds, :]
 
@@ -2290,7 +2253,6 @@ class Tetra3():
         arr2 = np.take(catalog_pattern_vectors, upper_tri_index[1], axis=1)
         catalog_pattern_edges = np.sort(_angle_from_distance(norm(arr1 - arr2, axis=-1)))
 
-        self._pattern_cache[hash_index] = (catalog_pattern_edges, catalog_pattern_vectors)
         return (catalog_pattern_edges, catalog_pattern_vectors)
 
     def _get_nearby_stars(self, vector, radius):
