@@ -2259,7 +2259,7 @@ class Tetra3():
             return val
 
         self._pattern_cache_misses += 1
-        while len(self._pattern_cache) >= self._pattern_cache_capacity:
+        while len(self._pattern_cache) > self._pattern_cache_capacity:
             self._pattern_cache.popitem(last=False)  # Discard least recently used.
 
         # Iterate over table hash indices.
