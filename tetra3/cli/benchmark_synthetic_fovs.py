@@ -8,6 +8,7 @@ Example:
 import argparse
 
 from tetra3 import benchmark_synthetic_fovs
+from pathlib import Path
 from typing import List
 
 def _print_histo_bin(solve_time_histo: List[float], bin_width: float):
@@ -38,11 +39,14 @@ def main():
     # optional flags
     parser.add_argument("--num_centroids", type=int, default=20,
                         help="Maximum number of centroids to pass to solver.")
+    parser.add_argument("--database", type=Path, default='default_database',
+                        help="Pattern database to load.")
 
     args = parser.parse_args()
 
     result = benchmark_synthetic_fovs.benchmark_synthetic_fovs(
-        args.width, args.height, args.fov_deg, args.num_fovs, args.num_centroids)
+        args.width, args.height, args.fov_deg, args.num_fovs, args.num_centroids,
+        database=args.database)
 
     num_failures = result['num_failures']
     num_successes = result['num_successes']
