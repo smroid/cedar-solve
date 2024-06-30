@@ -105,7 +105,6 @@ def main():
         save_largest_edge=args.save_largest_edge,
         multiscale_step=args.multiscale_step,
         epoch_proper_motion=args.epoch_proper_motion,
-        pattern_stars_per_fov=args.pattern_stars_per_fov,
     )
 
 if __name__ == "__main__":
