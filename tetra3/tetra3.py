@@ -1475,6 +1475,8 @@ class Tetra3():
                 - 'FOV': Calculated horizontal field of view of the provided image.
                 - 'distortion': Calculated distortion of the provided image.
                 - 'RMSE': RMS residual of matched stars in arcseconds.
+                - 'P90E': 90 percentile matched star residual in arcseconds.
+                - 'MAXE': Maximum matched star residual in arcseconds.
                 - 'Matches': Number of stars in the image matched to the database.
                 - 'Prob': Probability that the solution is a false-positive.
                 - 'epoch_equinox': The celestial RA/Dec equinox reference epoch.
@@ -1619,6 +1621,8 @@ class Tetra3():
                 - 'FOV': Calculated horizontal field of view of the provided image.
                 - 'distortion': Calculated distortion of the provided image.
                 - 'RMSE': RMS residual of matched stars in arcseconds.
+                - 'P90E': 90 percentile matched star residual in arcseconds.
+                - 'MAXE': Maximum matched star residual in arcseconds.
                 - 'Matches': Number of stars in the image matched to the database.
                 - 'Prob': Probability that the solution is a false-positive.
                 - 'epoch_equinox': The celestial RA/Dec equinox reference epoch.
@@ -1712,8 +1716,9 @@ class Tetra3():
         image_centroids = np.asarray(star_centroids)
         if num_centroids < p_size:
             return {'RA': None, 'Dec': None, 'Roll': None, 'FOV': None, 'distortion': None,
-                    'RMSE': None, 'Matches': None, 'Prob': None, 'epoch_equinox': None,
-                    'epoch_proper_motion': None, 'T_solve': 0, 'status': TOO_FEW}
+                    'RMSE': None, 'P90E': None, 'MAXE': None, 'Matches': None, 'Prob': None,
+                    'epoch_equinox': None, 'epoch_proper_motion': None, 'T_solve': 0,
+                    'status': TOO_FEW}
 
         # Apply the same "cluster buster" thinning strategy as is used in database
         # construction.
@@ -2065,15 +2070,21 @@ class Tetra3():
 
                     # Calculate residual angles with more accurate formula
                     distance = norm(final_match_vectors - matched_catalog_vectors, axis=1)
+                    distance.sort()
+                    p90_index = int(0.9 * (len(distance)-1))
+                    p90_err_angle = np.rad2deg(_angle_from_distance(distance[p90_index])) * 3600
+                    max_err_angle = np.rad2deg(_angle_from_distance(distance[-1])) * 3600
                     angle = _angle_from_distance(distance)
-                    residual = np.rad2deg(np.sqrt(np.mean(angle**2))) * 3600
+                    rms_err_angle = np.rad2deg(np.sqrt(np.mean(angle**2))) * 3600
 
                     # Solved in this time
                     t_solve = (precision_timestamp() - t0_solve)*1000
                     solution_dict = {'RA': ra, 'Dec': dec,
                                      'Roll': roll,
                                      'FOV': np.rad2deg(fov), 'distortion': k,
-                                     'RMSE': residual,
+                                     'RMSE': rms_err_angle,
+                                     'P90E': p90_err_angle,
+                                     'MAXE': max_err_angle,
                                      'Matches': num_star_matches,
                                      'Prob': prob_mismatch*self.num_patterns,
                                      'epoch_equinox': self._db_props['epoch_equinox'],
@@ -2212,8 +2223,9 @@ class Tetra3():
             'FAIL: Looked up/evaluated %s/%s catalog patterns' %
             (catalog_lookup_count, catalog_eval_count))
         return {'RA': None, 'Dec': None, 'Roll': None, 'FOV': None, 'distortion': None,
-                'RMSE': None, 'Matches': None, 'Prob': None, 'epoch_equinox': None,
-                'epoch_proper_motion': None, 'T_solve': t_solve, 'status': status}
+                'RMSE': None, 'P90E': None, 'MAXE': None, 'Matches': None, 'Prob': None,
+                'epoch_equinox': None, 'epoch_proper_motion': None, 'T_solve': t_solve,
+                'status': status}
 
     def cancel_solve(self):
         """Signal that a currently running solve_from_image() or solve_from_centroids() should
