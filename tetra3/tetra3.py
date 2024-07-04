@@ -1452,10 +1452,10 @@ class Tetra3():
                 (y, x) coordinate measured from top left corner of the image. Defaults to None.
             target_sky_coord (numpy.ndarray, optional): Sky coordinates to return image (y, x) for.
                 Size (N,2) where each row is the (RA, Dec) in degrees. Defaults to None.
-            distortion (float or tuple, optional): Set the estimated distortion of the image as a scalar
-                 or the range of distortions to search as a tuple (min, max). Negative distortion is
-                 barrel, positive is pincushion. Given as amount of distortion at width/2 from centre.
-                 Can set to None to disable distortion calculation entirely. Default 0.
+            distortion (float, optional): Set the estimated distortion of the image.
+                 Negative distortion is barrel, positive is pincushion. Given as amount of distortion
+                 at width/2 from centre. Can set to None to disable distortion calculation entirely.
+                 Default 0.
             return_matches (bool, optional): If set to True, the catalogue entries of the mached
                 stars and their pixel coordinates in the image is returned.
             return_visual (bool, optional): If set to True, an image is returned that visualises
@@ -1474,7 +1474,8 @@ class Tetra3():
                   direction (towards y=0). Zero when north and up coincide; a positive
                   roll angle means north is counter-clockwise from image "up".
                 - 'FOV': Calculated horizontal field of view of the provided image.
-                - 'distortion': Calculated distortion of the provided image.
+                - 'distortion': Calculated distortion of the provided image. Omitted if
+                  the caller's distortion estimate is None.
                 - 'RMSE': RMS residual of matched stars in arcseconds.
                 - 'P90E': 90 percentile matched star residual in arcseconds.
                 - 'MAXE': Maximum matched star residual in arcseconds.
@@ -1600,10 +1601,10 @@ class Tetra3():
                 (y, x) coordinate measured from top left corner of the image. Defaults to None.
             target_sky_coord (numpy.ndarray, optional): Sky coordinates to return image (y, x) for.
                 Size (N,2) where each row is the (RA, Dec) in degrees. Defaults to None.
-            distortion (float or tuple, optional): Set the estimated distortion of the image as a scalar
-                 or the range of distortions to search as a tuple (min, max). Negative distortion is
-                 barrel, positive is pincushion. Given as amount of distortion at width/2 from centre.
-                 Can set to None to disable distortion calculation entirely. Default 0.
+            distortion (float, optional): Set the estimated distortion of the image.
+                 Negative distortion is barrel, positive is pincushion. Given as amount of distortion
+                 at width/2 from centre. Can set to None to disable distortion calculation entirely.
+                 Default 0.
             return_matches (bool, optional): If set to True, the catalogue entries of the mached
                 stars and their pixel coordinates in the image is returned.
             return_visual (bool, optional): If set to True, an image is returned that visualises
@@ -1620,7 +1621,8 @@ class Tetra3():
                   direction (towards y=0). Zero when north and up coincide; a positive
                   roll angle means north is counter-clockwise from image "up".
                 - 'FOV': Calculated horizontal field of view of the provided image.
-                - 'distortion': Calculated distortion of the provided image.
+                - 'distortion': Calculated distortion of the provided image. Omitted if
+                  the caller's distortion estimate is None.
                 - 'RMSE': RMS residual of matched stars in arcseconds.
                 - 'P90E': 90 percentile matched star residual in arcseconds.
                 - 'MAXE': Maximum matched star residual in arcseconds.
@@ -1746,28 +1748,24 @@ class Tetra3():
             self._logger.debug('Trimmed %d match centroids to %d' % (num_centroids, len(image_centroids)))
             num_centroids = len(image_centroids)
 
+        if isinstance(distortion, (list, tuple)):
+            self._logger.warning('Tuple distortion %s no longer supported, ignoring' % distortion)
+            distortion = None
+        elif distortion is not None and not isinstance(distortion, Number):
+            self._logger.warning('Non-numeric distortion %s given, ignoring' % distortion)
+            distortion = None
+
         if distortion is None:
-            # Compute star vectors using an estimate for the field-of-view in the x dimension
-            image_centroids_vectors = _compute_vectors(
-                image_centroids, (height, width), fov_initial)
             image_centroids_undist = image_centroids
-        elif isinstance(distortion, Number):
+        else:
             # If caller-estimated distortion, undistort centroids, then proceed as normal
-            image_centroids_undist = _undistort_centroids(image_centroids, (height, width), k=distortion)
+            image_centroids_undist = _undistort_centroids(
+                image_centroids, (height, width), k=distortion)
             self._logger.debug('Undistorted centroids with k=%d' % distortion)
-            # Compute star vectors using an estimate for the field-of-view in the x dimension
-            image_centroids_vectors = _compute_vectors(
-                image_centroids_undist, (height, width), fov_initial)
-        elif isinstance(distortion, (list, tuple)):
-            # If given range, need to predistort for future calculations
-            # Make each step at most 0.1 (10%) distortion
-            distortion_range = np.linspace(min(distortion), max(distortion),
-                int(np.ceil(round(max(distortion) - min(distortion), 6)*10) + 1))
-            self._logger.debug('Searching distortion range: ' + str(np.round(distortion_range, 6)))
-            image_centroids_preundist = np.zeros((len(distortion_range),) + image_centroids.shape)
-            for (i, k) in enumerate(distortion_range):
-                image_centroids_preundist[i, :] = _undistort_centroids(
-                    image_centroids, (height, width), k=k)
+
+        # Compute star vectors using an estimate for the field-of-view in the x dimension
+        image_centroids_vectors = _compute_vectors(
+            image_centroids_undist, (height, width), fov_initial)
 
         # Find the possible range of edge ratio patterns these four image centroids
         # could correspond to.
@@ -1802,33 +1800,14 @@ class Tetra3():
             # Set largest distance to None, this is cached to avoid recalculating in future FOV estimation.
             pattern_largest_distance = None
 
-            # No distortion processing, or caller-estimated distortion, use directly.
-            if distortion is None or isinstance(distortion, Number):
-                image_pattern_vectors = image_centroids_vectors[image_pattern_indices, :]
-                # Calculate what the edge ratios are and broaden by p_max_err tolerance
-                edge_angles_sorted = np.sort(_angle_from_distance(pdist(image_pattern_vectors)))
-                image_pattern_largest_edge = edge_angles_sorted[-1]
-                image_pattern = edge_angles_sorted[:-1] / image_pattern_largest_edge
-                image_pattern_edge_ratio_min = image_pattern - p_max_err
-                image_pattern_edge_ratio_max = image_pattern + p_max_err
-                image_pattern_hash = (image_pattern*p_bins).astype(int)
-            else:
-                # Calculate edge ratios for all predistortions, take max/min
-                image_pattern_edge_ratio_preundist = np.zeros((len(distortion_range), pattlen))
-                for i in range(len(distortion_range)):
-                    image_pattern_vectors = _compute_vectors(
-                        image_centroids_preundist[i, image_pattern_indices], (height, width), fov_initial)
-                    preundist_edge_angles_sorted = np.sort(
-                        _angle_from_distance(pdist(image_pattern_vectors)))
-                    image_pattern_largest_edge = preundist_edge_angles_sorted[-1]
-                    image_pattern_edge_ratio_preundist[i, :] = \
-                        preundist_edge_angles_sorted[:-1] / image_pattern_largest_edge
-                    if i == len(distortion_range) // 2:
-                        edge_angles_sorted = preundist_edge_angles_sorted
-                        image_pattern = edge_angles_sorted[:-1] / edge_angles_sorted[-1]
-                        image_pattern_hash = (image_pattern*p_bins).astype(int)
-                image_pattern_edge_ratio_min = np.min(image_pattern_edge_ratio_preundist, axis=0) - p_max_err
-                image_pattern_edge_ratio_max = np.max(image_pattern_edge_ratio_preundist, axis=0) + p_max_err
+            image_pattern_vectors = image_centroids_vectors[image_pattern_indices, :]
+            # Calculate what the edge ratios are and broaden by p_max_err tolerance
+            edge_angles_sorted = np.sort(_angle_from_distance(pdist(image_pattern_vectors)))
+            image_pattern_largest_edge = edge_angles_sorted[-1]
+            image_pattern = edge_angles_sorted[:-1] / image_pattern_largest_edge
+            image_pattern_edge_ratio_min = image_pattern - p_max_err
+            image_pattern_edge_ratio_max = image_pattern + p_max_err
+            image_pattern_hash = (image_pattern*p_bins).astype(int)
 
             image_patterns_evaluated += 1
 
@@ -1872,68 +1851,17 @@ class Tetra3():
                 # Go through each matching pattern and calculate further
                 for index in valid_patterns:
                     catalog_eval_count += 1
-                    # Estimate coarse distortion from the pattern
-                    if distortion is None or isinstance(distortion, Number):
-                        # Distortion is ignored or is caller-estimated and has already
-                        # been applied to image_centroids to obtain image_centroids_undist.
-                        pass
-                    else:
-                        # Calculate the (coarse) distortion by comparing pattern to the min/max
-                        # patterns
-                        edge_ratio_errors_preundist = all_catalog_edge_ratios[index] - image_pattern_edge_ratio_preundist
-                        # Now find the two indices in preundist that are closest to the real distortion
-                        if len(distortion_range) > 2:
-                            # If there are more than 2 preundistortions, select the two closest ones
-                            # for interpolation
-                            rmserr = np.sum(edge_ratio_errors_preundist**2, axis=1)
-                            closest = np.argmin(rmserr)
-                            if closest == 0:
-                                # Use first two
-                                low_ind = 0
-                                high_ind = 1
-                            elif closest == (len(distortion_range) - 1):
-                                # Use last two
-                                low_ind = len(distortion_range) - 2
-                                high_ind = len(distortion_range) - 1
-                            else:
-                                if rmserr[closest + 1] > rmserr[closest - 1]:
-                                    # Use closest and the one after
-                                    low_ind = closest
-                                    high_ind = closest + 1
-                                else:
-                                    # Use closest and the one before
-                                    low_ind = closest - 1
-                                    high_ind = closest
-                        else:
-                            # If just two preundistortions, set the variables
-                            low_ind = 0
-                            high_ind = 1
-                        # How far do we need to go from low to high to reach zero
-                        x = np.mean(edge_ratio_errors_preundist[low_ind, :] /
-                                    (edge_ratio_errors_preundist[low_ind, :] -
-                                     edge_ratio_errors_preundist[high_ind, :]))
-                        # Distortion k estimate
-                        dist_est = distortion_range[low_ind] + x*(distortion_range[high_ind] -
-                                                                  distortion_range[low_ind])
-                        # Undistort centroid pattern with estimate
-                        image_centroids_undist = _undistort_centroids(
-                            image_centroids, (height, width), k=dist_est)
 
                     # Estimate coarse FOV from the pattern
                     catalog_largest_edge = all_catalog_largest_edges[index]
-                    if fov_estimate is not None and (distortion is None or isinstance(distortion, Number)):
+                    if fov_estimate is not None:
                         # Can quickly correct FOV by scaling given estimate
                         fov = catalog_largest_edge / image_pattern_largest_edge * fov_initial
                     else:
                         # Use camera projection to calculate coarse fov
-                        if distortion is None or isinstance(distortion, Number):
-                            # The FOV estimate will be the same for each attempt with this pattern
-                            # so we can cache the value by checking if we have already set it
-                            if pattern_largest_distance is None:
-                                pattern_largest_distance = np.max(
-                                    pdist(image_centroids_undist[image_pattern_indices, :]))
-                        else:
-                            # If distortion is allowed to vary, we need to calculate this every time
+                        # The FOV estimate will be the same for each attempt with this pattern
+                        # so we can cache the value by checking if we have already set it
+                        if pattern_largest_distance is None:
                             pattern_largest_distance = np.max(
                                 pdist(image_centroids_undist[image_pattern_indices, :]))
                         f = pattern_largest_distance / 2 / np.tan(catalog_largest_edge/2)
@@ -2020,6 +1948,8 @@ class Tetra3():
 
                     # Get the vectors for all matches in the image using coarse fov
                     matched_image_centroids_undist = image_centroids_undist[matched_stars[:, 0], :]
+                    matched_image_vectors = _compute_vectors(matched_image_centroids_undist,
+                                                             (height, width), fov)
                     matched_catalog_vectors = nearby_star_vectors[matched_stars[:, 1], :]
                     # Recompute rotation matrix for more accuracy
                     rotation_matrix = _find_rotation_matrix(matched_image_vectors, matched_catalog_vectors)
@@ -2034,8 +1964,6 @@ class Tetra3():
                     if distortion is None:
                         # Compare mutual angles in catalogue to those with current
                         # FOV estimate in order to scale accurately for fine FOV
-                        matched_image_vectors = _compute_vectors(matched_image_centroids_undist,
-                                                                 (height, width), fov)
                         angles_camera = _angle_from_distance(pdist(matched_image_vectors))
                         angles_catalogue = _angle_from_distance(pdist(matched_catalog_vectors))
                         fov *= np.mean(angles_catalogue / angles_camera)
