@@ -244,6 +244,7 @@ def _undistort_centroids(centroids, size, k):
     centroids += [height/2, width/2]
     return centroids
 
+# Note: this function is not called.
 def _distort_centroids(centroids, size, k, tol=1e-6, maxiter=30):
     """Distort centroids corresponding to r_u = r_d(1 - k'*r_d^2)/(1 - k),
     where k'=k*(2/width)^2 i.e. k is the distortion that applies
@@ -1451,7 +1452,7 @@ class Tetra3():
                 (y, x) coordinate measured from top left corner of the image. Defaults to None.
             target_sky_coord (numpy.ndarray, optional): Sky coordinates to return image (y, x) for.
                 Size (N,2) where each row is the (RA, Dec) in degrees. Defaults to None.
-            distortion (float or tuple, optional): Set the known distortion of the image as a scalar
+            distortion (float or tuple, optional): Set the estimated distortion of the image as a scalar
                  or the range of distortions to search as a tuple (min, max). Negative distortion is
                  barrel, positive is pincushion. Given as amount of distortion at width/2 from centre.
                  Can set to None to disable distortion calculation entirely. Default 0.
@@ -1599,7 +1600,7 @@ class Tetra3():
                 (y, x) coordinate measured from top left corner of the image. Defaults to None.
             target_sky_coord (numpy.ndarray, optional): Sky coordinates to return image (y, x) for.
                 Size (N,2) where each row is the (RA, Dec) in degrees. Defaults to None.
-            distortion (float or tuple, optional): Set the known distortion of the image as a scalar
+            distortion (float or tuple, optional): Set the estimated distortion of the image as a scalar
                  or the range of distortions to search as a tuple (min, max). Negative distortion is
                  barrel, positive is pincushion. Given as amount of distortion at width/2 from centre.
                  Can set to None to disable distortion calculation entirely. Default 0.
@@ -1745,11 +1746,18 @@ class Tetra3():
             self._logger.debug('Trimmed %d match centroids to %d' % (num_centroids, len(image_centroids)))
             num_centroids = len(image_centroids)
 
-        # If distortion is not None, we need to do some prep work
-        if isinstance(distortion, Number):
-            # If known distortion, undistort centroids, then proceed as normal
-            image_centroids = _undistort_centroids(image_centroids, (height, width), k=distortion)
+        if distortion is None:
+            # Compute star vectors using an estimate for the field-of-view in the x dimension
+            image_centroids_vectors = _compute_vectors(
+                image_centroids, (height, width), fov_initial)
+            image_centroids_undist = image_centroids
+        elif isinstance(distortion, Number):
+            # If caller-estimated distortion, undistort centroids, then proceed as normal
+            image_centroids_undist = _undistort_centroids(image_centroids, (height, width), k=distortion)
             self._logger.debug('Undistorted centroids with k=%d' % distortion)
+            # Compute star vectors using an estimate for the field-of-view in the x dimension
+            image_centroids_vectors = _compute_vectors(
+                image_centroids_undist, (height, width), fov_initial)
         elif isinstance(distortion, (list, tuple)):
             # If given range, need to predistort for future calculations
             # Make each step at most 0.1 (10%) distortion
@@ -1760,8 +1768,6 @@ class Tetra3():
             for (i, k) in enumerate(distortion_range):
                 image_centroids_preundist[i, :] = _undistort_centroids(
                     image_centroids, (height, width), k=k)
-        # Compute star vectors using an estimate for the field-of-view in the x dimension
-        image_centroids_vectors = _compute_vectors(image_centroids, (height, width), fov_initial)
 
         # Find the possible range of edge ratio patterns these four image centroids
         # could correspond to.
@@ -1796,7 +1802,7 @@ class Tetra3():
             # Set largest distance to None, this is cached to avoid recalculating in future FOV estimation.
             pattern_largest_distance = None
 
-            # No or already known distortion, use directly
+            # No distortion processing, or caller-estimated distortion, use directly.
             if distortion is None or isinstance(distortion, Number):
                 image_pattern_vectors = image_centroids_vectors[image_pattern_indices, :]
                 # Calculate what the edge ratios are and broaden by p_max_err tolerance
@@ -1868,8 +1874,9 @@ class Tetra3():
                     catalog_eval_count += 1
                     # Estimate coarse distortion from the pattern
                     if distortion is None or isinstance(distortion, Number):
-                        # Distortion is known, set variables and estimate FOV
-                        image_centroids_undist = image_centroids
+                        # Distortion is ignored or is caller-estimated and has already
+                        # been applied to image_centroids to obtain image_centroids_undist.
+                        pass
                     else:
                         # Calculate the (coarse) distortion by comparing pattern to the min/max
                         # patterns
@@ -2012,9 +2019,7 @@ class Tetra3():
                                        % (prob_mismatch, prob_mismatch*self.num_patterns))
 
                     # Get the vectors for all matches in the image using coarse fov
-                    matched_image_centroids = image_centroids[matched_stars[:, 0], :]
-                    matched_image_vectors = _compute_vectors(matched_image_centroids,
-                                                             (height, width), fov)
+                    matched_image_centroids_undist = image_centroids_undist[matched_stars[:, 0], :]
                     matched_catalog_vectors = nearby_star_vectors[matched_stars[:, 1], :]
                     # Recompute rotation matrix for more accuracy
                     rotation_matrix = _find_rotation_matrix(matched_image_vectors, matched_catalog_vectors)
@@ -2029,11 +2034,12 @@ class Tetra3():
                     if distortion is None:
                         # Compare mutual angles in catalogue to those with current
                         # FOV estimate in order to scale accurately for fine FOV
+                        matched_image_vectors = _compute_vectors(matched_image_centroids_undist,
+                                                                 (height, width), fov)
                         angles_camera = _angle_from_distance(pdist(matched_image_vectors))
                         angles_catalogue = _angle_from_distance(pdist(matched_catalog_vectors))
                         fov *= np.mean(angles_catalogue / angles_camera)
                         k = None
-                        matched_image_centroids_undist = matched_image_centroids
                     else:
                         # Accurately calculate the FOV and distortion by looking at the angle from boresight
                         # on all matched catalogue vectors and all matched image centroids
@@ -2043,7 +2049,7 @@ class Tetra3():
                             /matched_catalog_vectors_derot[:, 0]
                         # Get the (distorted) pixel distance from image centre for all matches
                         # (scaled relative to width/2)
-                        radius_matched_image_centroids = norm(matched_image_centroids
+                        radius_matched_image_centroids = norm(matched_image_centroids_undist
                                                               - [height/2, width/2], axis=1)/width*2
                         # Solve system of equations in RMS sense for focal length f and distortion k
                         # where f is focal length in units of image width/2
@@ -2058,9 +2064,9 @@ class Tetra3():
                         self._logger.debug('Calculated focal length to %.2f and distortion to %.3f' % (f, k))
                         # Calculate (horizontal) true field of view
                         fov = 2*np.arctan(1/f)
-                        # Undistort centroids for final calculations
-                        matched_image_centroids_undist = _undistort_centroids(
-                            matched_image_centroids, (height, width), k)
+                        # Re-undistort centroids for final calculations
+                        image_centroids_undist = _undistort_centroids(image_centroids, (height, width), k)
+                        matched_image_centroids_undist = image_centroids_undist[matched_stars[:, 0], :]
 
                     # Get vectors
                     final_match_vectors = _compute_vectors(
@@ -2081,7 +2087,8 @@ class Tetra3():
                     t_solve = (precision_timestamp() - t0_solve)*1000
                     solution_dict = {'RA': ra, 'Dec': dec,
                                      'Roll': roll,
-                                     'FOV': np.rad2deg(fov), 'distortion': k,
+                                     'FOV': np.rad2deg(fov),
+                                     'distortion': k,
                                      'RMSE': rms_err_angle,
                                      'P90E': p90_err_angle,
                                      'MAXE': max_err_angle,
