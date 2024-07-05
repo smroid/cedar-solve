@@ -1556,8 +1556,8 @@ class Tetra3():
     def solve_from_centroids(self, star_centroids, size, fov_estimate=None, fov_max_error=None,
                              match_radius=.01, match_threshold=1e-4,
                              solve_timeout=5000, target_pixel=None, target_sky_coord=None, distortion=0,
-                             return_matches=False, return_visual=False, match_max_error=.002,
-                             pattern_checking_stars=None):
+                             return_matches=False, return_visual=False, return_rotation_matrix=False,
+                             match_max_error=.002, pattern_checking_stars=None):
         """Solve for the sky location using a list of centroids.
 
         Use :meth:`tetra3.get_centroids_from_image` or your own centroiding algorithm to
@@ -1609,6 +1609,7 @@ class Tetra3():
                 stars and their pixel coordinates in the image is returned.
             return_visual (bool, optional): If set to True, an image is returned that visualises
                 the solution.
+            return_rotation_matrix (bool, optional): If True, the 3x3 rotation matrix is returned.
             match_max_error (float, optional): Maximum difference allowed in pattern for a match.
                 If None, uses the 'pattern_max_error' value from the database.
             pattern_checking_stars: No longer meaningful, ignored.
@@ -1657,6 +1658,8 @@ class Tetra3():
                   FOV and distortion estimates in orange, the final FOV and distortion
                   estimates in green. Also has circles for the catalogue stars in green or
                   red for successful/unsuccessful match. Not included if return_visual=False.
+                - 'rotation_matrix' 3x3 rotation matrix. Not included if
+                  return_rotation_matrix=False.
                 - 'status': One of:
                   MATCH_FOUND: solution was obtained
                   NO_MATCH: no match was found after exhausting all possibilities
@@ -2132,6 +2135,9 @@ class Tetra3():
                                         width*match_radius, outline='red')
 
                         solution_dict['visual'] = img
+
+                    if return_rotation_matrix:
+                        solution_dict['rotation_matrix'] = rotation_matrix.tolist()
 
                     self._logger.debug(solution_dict)
                     self._logger.debug(
