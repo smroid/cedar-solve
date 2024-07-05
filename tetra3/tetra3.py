@@ -1711,7 +1711,7 @@ class Tetra3():
         verification_stars_per_fov = self._db_props['verification_stars_per_fov']
         p_size = self._db_props['pattern_size']
         p_bins = self._db_props['pattern_bins']
-        if match_max_error is None:
+        if match_max_error is None or match_max_error < self._db_props['pattern_max_error']:
             match_max_error = self._db_props['pattern_max_error']
         p_max_err = match_max_error
         presorted = self._db_props['presort_patterns']
