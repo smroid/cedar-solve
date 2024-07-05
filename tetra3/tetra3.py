@@ -237,14 +237,14 @@ def _undistort_centroids(centroids, size, k):
     (height, width) = size[:2]
     # Centre
     centroids -= [height/2, width/2]
+    r_dist = norm(centroids, axis=1)/width*2
     # Scale
-    scale = (1 - k*(norm(centroids, axis=1)/width*2)**2)/(1 - k)
+    scale = (1 - k*r_dist**2)/(1 - k)
     centroids *= scale[:, None]
     # Decentre
     centroids += [height/2, width/2]
     return centroids
 
-# Note: this function is not called.
 def _distort_centroids(centroids, size, k, tol=1e-6, maxiter=30):
     """Distort centroids corresponding to r_u = r_d(1 - k'*r_d^2)/(1 - k),
     where k'=k*(2/width)^2 i.e. k is the distortion that applies
@@ -258,7 +258,7 @@ def _distort_centroids(centroids, size, k, tol=1e-6, maxiter=30):
     # Centre
     centroids -= [height/2, width/2]
     r_undist = norm(centroids, axis=1)/width*2
-    # Initial guess, distorted are the same positon
+    # Initial guess, distorted are the same position
     r_dist = r_undist.copy()
     for i in range(maxiter):
         r_undist_est = r_dist*(1 - k*r_dist**2)/(1 - k)
@@ -2036,14 +2036,14 @@ class Tetra3():
                         # Calculate the vector in the sky of the target pixel(s)
                         if k is not None:
                             target_pixel = _undistort_centroids(target_pixel, (height, width), k)
-                        target_vectors = _compute_vectors(
+                        target_vector = _compute_vectors(
                             target_pixel, (height, width), fov)
-                        rotated_target_vectors = np.dot(rotation_matrix.T, target_vectors.T).T
+                        rotated_target_vector = np.dot(rotation_matrix.T, target_vector.T).T
                         # Calculate and add RA/Dec to solution
-                        target_ra = np.rad2deg(np.arctan2(rotated_target_vectors[:, 1],
-                                                          rotated_target_vectors[:, 0])) % 360
+                        target_ra = np.rad2deg(np.arctan2(rotated_target_vector[:, 1],
+                                                          rotated_target_vector[:, 0])) % 360
                         target_dec = 90 - np.rad2deg(
-                            np.arccos(rotated_target_vectors[:,2]))
+                            np.arccos(rotated_target_vector[:,2]))
 
                         if target_ra.shape[0] > 1:
                             solution_dict['RA_target'] = target_ra.tolist()
@@ -2068,6 +2068,8 @@ class Tetra3():
                         target_sky_vectors_derot = np.dot(rotation_matrix, target_sky_vectors.T).T
                         (target_centroids, kept) = _compute_centroids(target_sky_vectors_derot,
                                                                       (height, width), fov)
+                        if k is not None:
+                            target_centroids = _distort_centroids(target_centroids, (height, width), k)
                         target_y = []
                         target_x = []
                         for i in range(target_centroids.shape[0]):
@@ -2267,6 +2269,53 @@ class Tetra3():
             raise ValueError(f'No star catalogue found at {str(catalog_file_full_pathname)}')
 
         return star_catalog, catalog_file_full_pathname
+
+    # celestial_coords: [[ra, dec], ...] in degrees
+    # returns: [[y, x], ...]
+    def transform_to_image_coords(
+            self, celestial_coords, width, height, fov, rotation_matrix, distortion):
+        rotation_matrix = np.array(rotation_matrix)
+
+        celestial_vectors = []
+        for cc in celestial_coords:
+            ra = np.deg2rad(cc[0])
+            dec = np.deg2rad(cc[1])
+            celestial_vectors.append([np.cos(ra) * np.cos(dec),
+                                      np.sin(ra) * np.cos(dec),
+                                      np.sin(dec)])
+        celestial_vectors = np.array(celestial_vectors)
+        celestial_vectors_derot = np.dot(rotation_matrix, celestial_vectors.T).T
+
+        (image_coords, kept) = _compute_centroids(
+            celestial_vectors_derot, (height, width), fov)
+        image_coords = _distort_centroids(image_coords, (height, width), distortion)
+        result = []
+        for i in range(image_coords.shape[0]):
+            if i in kept:
+                result.append(image_coords[i])
+        return result
+
+    # image_coords: [[y, x], ...]
+    # returns: [[ra, dec], ...] in degrees
+    def transform_to_celestial_coords(
+            self, image_coords, width, height, fov, rotation_matrix, distortion):
+        rotation_matrix = np.array(rotation_matrix)
+
+        image_coords = np.array(image_coords)
+        image_coords = _undistort_centroids(image_coords, (height, width), distortion)
+        image_vectors = _compute_vectors(image_coords, (height, width), fov)
+        rotated_image_vectors = np.dot(rotation_matrix.T, image_vectors.T).T
+
+        # Calculate and add RA/Dec to solution
+        ra = np.rad2deg(np.arctan2(rotated_image_vectors[:, 1],
+                                   rotated_image_vectors[:, 0])) % 360
+        dec = 90 - np.rad2deg(np.arccos(rotated_image_vectors[:,2]))
+
+        celestial_vectors = []
+        for i in range(len(ra)):
+            celestial_vectors.append((ra[i], dec[i]))
+
+        return celestial_vectors
 
 
 def get_centroids_from_image(image, sigma=2, image_th=None, crop=None, downsample=None,
