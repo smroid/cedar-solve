@@ -28,7 +28,7 @@ def _epoch_type(value: str) -> Union[float, str, None]:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Solve star patterns and manage databases")
+    parser = argparse.ArgumentParser(description="Generate star pattern database")
 
     # positional arguments
     parser.add_argument("STAR_CATALOG", type=Path, help="Star catalog file to load")
