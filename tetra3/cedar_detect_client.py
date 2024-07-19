@@ -68,7 +68,7 @@ class CedarDetectClient:
             self._shmem.unlink()
             self._shmem = None
 
-    def extract_centroids(self, image, sigma, max_size, use_binned,
+    def extract_centroids(self, image, sigma, max_size, use_binned, binning=None,
                           detect_hot_pixels=True):
         """Invokes the CedarDetect.ExtractCentroids() RPC. Returns [(y,x)] of the
         detected star centroids.
@@ -96,7 +96,7 @@ class CedarDetectClient:
                                         shmem_name=self._shmem.name)
             req = cedar_detect_pb2.CentroidsRequest(
                 input_image=im, sigma=sigma, max_size=max_size, return_binned=False,
-                use_binned_for_star_candidates=use_binned,
+                binning=binning, use_binned_for_star_candidates=use_binned,
                 detect_hot_pixels=detect_hot_pixels)
             try:
                 centroids_result = self._get_stub().ExtractCentroids(req)
