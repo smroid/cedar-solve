@@ -24,11 +24,6 @@ def draw_box(img_draw, centre, radius, **kwargs):
     bbox = [centre[1] - radius, centre[0] - radius, centre[1] + radius, centre[0] + radius]
     img_draw.rectangle(bbox, **kwargs)
 
-# Create instance and load the default database, built for 30 to 10 degree field of view.
-# Pass `load_database=None` to not load a database (e.g. to build your own; see
-# generate_database.py example script).
-t3 = tetra3.Tetra3(load_database='default_database')
-
 # Use cedar_detect if we are able to load it.
 try:
     from tetra3 import cedar_detect_client
@@ -38,6 +33,10 @@ except Exception as e:
     print("WARNING: could not setup Cedar Detect client: %s" % e);
     USE_CEDAR_DETECT = False
 
+# Create instance and load the default database, built for 30 to 10 degree field of view.
+# Pass `load_database=None` to not load a database (e.g. to build your own; see
+# generate_database.py example script).
+t3 = tetra3.Tetra3(load_database='default_database')
 
 # Path where images are
 path = EXAMPLES_DIR / 'data' / 'medium_fov'
