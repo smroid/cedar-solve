@@ -34,7 +34,6 @@ class CedarDetectClient:
 
         self._port = port
         self._subprocess = subprocess.Popen([self._binary_path, '--port', str(self._port)])
-        time.sleep(2)
         # Will initialize on first use.
         self._stub = None
         self._shmem = None
@@ -99,7 +98,8 @@ class CedarDetectClient:
                 binning=binning, use_binned_for_star_candidates=use_binned,
                 detect_hot_pixels=detect_hot_pixels)
             try:
-                centroids_result = self._get_stub().ExtractCentroids(req)
+                centroids_result = self._get_stub().ExtractCentroids(req,
+                                                                     wait_for_ready=True)
             except grpc.RpcError as err:
                 if err.code() == grpc.StatusCode.INTERNAL:
                     logging.warning('RPC failed with: %s' % err.details())
