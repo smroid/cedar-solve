@@ -2270,52 +2270,50 @@ class Tetra3():
 
         return star_catalog, catalog_file_full_pathname
 
-    # celestial_coords: [[ra, dec], ...] in degrees
-    # returns: [[y, x], ...]
-    def transform_to_image_coords(
-            self, celestial_coords, width, height, fov, rotation_matrix, distortion):
-        rotation_matrix = np.array(rotation_matrix)
+# celestial_coords: [[ra, dec], ...] in degrees
+# returns: [[y, x], ...]
+def transform_to_image_coords(celestial_coords, width, height, fov,
+                              rotation_matrix, distortion):
+    rotation_matrix = np.array(rotation_matrix)
+    celestial_vectors = []
+    for cc in celestial_coords:
+        ra = np.deg2rad(cc[0])
+        dec = np.deg2rad(cc[1])
+        celestial_vectors.append([np.cos(ra) * np.cos(dec),
+                                  np.sin(ra) * np.cos(dec),
+                                  np.sin(dec)])
+    celestial_vectors = np.array(celestial_vectors)
+    celestial_vectors_derot = np.dot(rotation_matrix, celestial_vectors.T).T
+    (image_coords, kept) = _compute_centroids(
+        celestial_vectors_derot, (height, width), fov)
+    image_coords = _distort_centroids(image_coords, (height, width), distortion)
+    result = []
+    for i in range(image_coords.shape[0]):
+        if i in kept:
+            result.append(image_coords[i])
+    return result
 
-        celestial_vectors = []
-        for cc in celestial_coords:
-            ra = np.deg2rad(cc[0])
-            dec = np.deg2rad(cc[1])
-            celestial_vectors.append([np.cos(ra) * np.cos(dec),
-                                      np.sin(ra) * np.cos(dec),
-                                      np.sin(dec)])
-        celestial_vectors = np.array(celestial_vectors)
-        celestial_vectors_derot = np.dot(rotation_matrix, celestial_vectors.T).T
+# image_coords: [[y, x], ...]
+# returns: [[ra, dec], ...] in degrees
+def transform_to_celestial_coords(image_coords, width, height, fov,
+                                  rotation_matrix, distortion):
+    rotation_matrix = np.array(rotation_matrix)
 
-        (image_coords, kept) = _compute_centroids(
-            celestial_vectors_derot, (height, width), fov)
-        image_coords = _distort_centroids(image_coords, (height, width), distortion)
-        result = []
-        for i in range(image_coords.shape[0]):
-            if i in kept:
-                result.append(image_coords[i])
-        return result
+    image_coords = np.array(image_coords)
+    image_coords = _undistort_centroids(image_coords, (height, width), distortion)
+    image_vectors = _compute_vectors(image_coords, (height, width), fov)
+    rotated_image_vectors = np.dot(rotation_matrix.T, image_vectors.T).T
 
-    # image_coords: [[y, x], ...]
-    # returns: [[ra, dec], ...] in degrees
-    def transform_to_celestial_coords(
-            self, image_coords, width, height, fov, rotation_matrix, distortion):
-        rotation_matrix = np.array(rotation_matrix)
+    # Calculate and add RA/Dec to solution
+    ra = np.rad2deg(np.arctan2(rotated_image_vectors[:, 1],
+                               rotated_image_vectors[:, 0])) % 360
+    dec = 90 - np.rad2deg(np.arccos(rotated_image_vectors[:,2]))
 
-        image_coords = np.array(image_coords)
-        image_coords = _undistort_centroids(image_coords, (height, width), distortion)
-        image_vectors = _compute_vectors(image_coords, (height, width), fov)
-        rotated_image_vectors = np.dot(rotation_matrix.T, image_vectors.T).T
+    celestial_vectors = []
+    for i in range(len(ra)):
+        celestial_vectors.append((ra[i], dec[i]))
 
-        # Calculate and add RA/Dec to solution
-        ra = np.rad2deg(np.arctan2(rotated_image_vectors[:, 1],
-                                   rotated_image_vectors[:, 0])) % 360
-        dec = 90 - np.rad2deg(np.arccos(rotated_image_vectors[:,2]))
-
-        celestial_vectors = []
-        for i in range(len(ra)):
-            celestial_vectors.append((ra[i], dec[i]))
-
-        return celestial_vectors
+    return celestial_vectors
 
 
 def get_centroids_from_image(image, sigma=2, image_th=None, crop=None, downsample=None,
