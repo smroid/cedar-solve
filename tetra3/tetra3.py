@@ -2285,7 +2285,7 @@ def transform_to_image_coords(celestial_coords, width, height, fov,
     celestial_vectors = np.array(celestial_vectors)
     celestial_vectors_derot = np.dot(rotation_matrix, celestial_vectors.T).T
     (image_coords, kept) = _compute_centroids(
-        celestial_vectors_derot, (height, width), fov)
+        celestial_vectors_derot, (height, width), np.deg2rad(fov))
     image_coords = _distort_centroids(image_coords, (height, width), distortion)
     result = []
     for i in range(image_coords.shape[0]):
@@ -2301,7 +2301,7 @@ def transform_to_celestial_coords(image_coords, width, height, fov,
 
     image_coords = np.array(image_coords)
     image_coords = _undistort_centroids(image_coords, (height, width), distortion)
-    image_vectors = _compute_vectors(image_coords, (height, width), fov)
+    image_vectors = _compute_vectors(image_coords, (height, width), np.deg2rad(fov))
     rotated_image_vectors = np.dot(rotation_matrix.T, image_vectors.T).T
 
     # Calculate and add RA/Dec to solution
