@@ -57,16 +57,18 @@ class CentroidsResult(_message.Message):
     def __init__(self, noise_estimate: _Optional[float] = ..., background_estimate: _Optional[float] = ..., hot_pixel_count: _Optional[int] = ..., peak_star_pixel: _Optional[int] = ..., star_candidates: _Optional[_Iterable[_Union[StarCentroid, _Mapping]]] = ..., binned_image: _Optional[_Union[Image, _Mapping]] = ..., algorithm_time: _Optional[_Union[_duration_pb2.Duration, _Mapping]] = ...) -> None: ...
 
 class Image(_message.Message):
-    __slots__ = ("width", "height", "image_data", "shmem_name")
+    __slots__ = ("width", "height", "image_data", "shmem_name", "reopen_shmem")
     WIDTH_FIELD_NUMBER: _ClassVar[int]
     HEIGHT_FIELD_NUMBER: _ClassVar[int]
     IMAGE_DATA_FIELD_NUMBER: _ClassVar[int]
     SHMEM_NAME_FIELD_NUMBER: _ClassVar[int]
+    REOPEN_SHMEM_FIELD_NUMBER: _ClassVar[int]
     width: int
     height: int
     image_data: bytes
     shmem_name: str
-    def __init__(self, width: _Optional[int] = ..., height: _Optional[int] = ..., image_data: _Optional[bytes] = ..., shmem_name: _Optional[str] = ...) -> None: ...
+    reopen_shmem: bool
+    def __init__(self, width: _Optional[int] = ..., height: _Optional[int] = ..., image_data: _Optional[bytes] = ..., shmem_name: _Optional[str] = ..., reopen_shmem: bool = ...) -> None: ...
 
 class StarCentroid(_message.Message):
     __slots__ = ("centroid_position", "brightness", "num_saturated")

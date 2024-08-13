@@ -51,15 +51,19 @@ class CedarDetectClient:
             self._stub = cedar_detect_pb2_grpc.CedarDetectStub(channel)
         return self._stub
 
+    # Returns True if the shared memory file was re-created with a new size.
     def _alloc_shmem(self, size):
+        resized = False
         if self._shmem is not None and size > self._shmem_size:
             self._shmem.close()
             self._shmem.unlink()
             self._shmem = None
+            resized = True
         if self._shmem is None:
             self._shmem = shared_memory.SharedMemory(
                 "/cedar_detect_image", create=True, size=size)
             self._shmem_size = size
+        return resized
 
     def _del_shmem(self):
         if self._shmem is not None:
@@ -84,7 +88,7 @@ class CedarDetectClient:
 
             # The image data is passed in a shared memory object, with the gRPC
             # request giving the name of the shared memory object.
-            self._alloc_shmem(size=width*height)
+            resized = self._alloc_shmem(size=width*height)
             # Create numpy array backed by shmem.
             shimg = np.ndarray(np_image.shape, dtype=np_image.dtype, buffer=self._shmem.buf)
             # Copy np_image into shimg. This is much cheaper than passing image
@@ -92,7 +96,7 @@ class CedarDetectClient:
             shimg[:] = np_image[:]
 
             im = cedar_detect_pb2.Image(width=width, height=height,
-                                        shmem_name=self._shmem.name)
+                                        shmem_name=self._shmem.name, reopen_shmem=resized)
             req = cedar_detect_pb2.CentroidsRequest(
                 input_image=im, sigma=sigma, max_size=max_size, return_binned=False,
                 binning=binning, use_binned_for_star_candidates=use_binned,
