@@ -1605,7 +1605,7 @@ class Tetra3():
                  Negative distortion is barrel, positive is pincushion. Given as amount of distortion
                  at width/2 from centre. Can set to None to disable distortion calculation entirely.
                  Default 0.
-            return_matches (bool, optional): If set to True, the catalogue entries of the mached
+            return_matches (bool, optional): If set to True, the catalogue entries of the matched
                 stars and their pixel coordinates in the image is returned.
             return_visual (bool, optional): If set to True, an image is returned that visualises
                 the solution.
