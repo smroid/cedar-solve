@@ -235,11 +235,12 @@ def _undistort_centroids(centroids, size, k):
     """
     centroids = np.array(centroids, dtype=np.float32)
     (height, width) = size[:2]
+    kp = k*(2/width)**2  # k prime
     # Centre
     centroids -= [height/2, width/2]
-    r_dist = norm(centroids, axis=1)/width*2
+    r_dist = norm(centroids, axis=1)
     # Scale
-    scale = (1 - k*r_dist**2)/(1 - k)
+    scale = (1 - kp*r_dist**2)/(1 - k)
     centroids *= scale[:, None]
     # Decentre
     centroids += [height/2, width/2]
@@ -255,20 +256,19 @@ def _distort_centroids(centroids, size, k, tol=1e-6, maxiter=30):
     """
     centroids = np.array(centroids, dtype=np.float32)
     (height, width) = size[:2]
+    kp = k*(2/width)**2  # k prime
     # Centre
     centroids -= [height/2, width/2]
-    r_undist = norm(centroids, axis=1)/width*2
-    # Initial guess, distorted are the same position
+    r_undist = norm(centroids, axis=1)
+    # Initial distorted guess, undistorted are the same position
     r_dist = r_undist.copy()
     for i in range(maxiter):
-        r_undist_est = r_dist*(1 - k*r_dist**2)/(1 - k)
-        dru_drd = (1 - 3*k*r_dist**2)/(1 - k)
+        r_undist_est = r_dist*(1 - kp*r_dist**2)/(1 - k)
+        dru_drd = (1 - 2*kp*r_dist)/(1 - k)
         error = r_undist - r_undist_est
         r_dist += error/dru_drd
-
         if np.all(np.abs(error) < tol):
             break
-
     centroids *= (r_dist/r_undist)[:, None]
     centroids += [height/2, width/2]
     return centroids
