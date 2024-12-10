@@ -1954,7 +1954,9 @@ class Tetra3():
                     matched_image_vectors = _compute_vectors(matched_image_centroids_undist,
                                                              (height, width), fov)
                     matched_catalog_vectors = nearby_star_vectors[matched_stars[:, 1], :]
-                    # Recompute rotation matrix for more accuracy
+                    # Recompute rotation matrix for more accuracy. The earlier rotation
+                    # matrix was calculated using the pattern stars; the recomputed rotation
+                    # matrix uses all star matches, not just the pattern stars.
                     rotation_matrix = _find_rotation_matrix(matched_image_vectors, matched_catalog_vectors)
                     # extract right ascension, declination, and roll from rotation matrix
                     ra = np.rad2deg(np.arctan2(rotation_matrix[0, 1],
@@ -1980,7 +1982,8 @@ class Tetra3():
                             /matched_catalog_vectors_derot[:, 0]
                         # Get the (distorted) pixel distance from image centre for all matches
                         # (scaled relative to width/2)
-                        radius_matched_image_centroids = norm(matched_image_centroids_undist
+                        matched_image_centroids = image_centroids[matched_stars[:, 0], :]
+                        radius_matched_image_centroids = norm(matched_image_centroids
                                                               - [height/2, width/2], axis=1)/width*2
                         # Solve system of equations in RMS sense for focal length f and distortion k
                         # where f is focal length in units of image width/2
