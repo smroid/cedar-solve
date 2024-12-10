@@ -43,6 +43,7 @@ path = EXAMPLES_DIR / 'data' / 'medium_fov'
 # path = EXAMPLES_DIR / 'data' / 'large_fov'
 try:
     for impath in path.glob('*'):
+    # for impath in path.glob('img_110ms_20241209_042605.bmp'):
         try:
             with Image.open(str(impath)) as img:
                 img = img.convert(mode='L')
@@ -80,7 +81,8 @@ try:
                     trimmed_centroids = centroids[:30]
                     solution = t3.solve_from_centroids(
                         trimmed_centroids, (height, width),
-                        return_matches=True, solve_timeout=5000)
+                        return_matches=True, solve_timeout=5000,
+                        distortion=0)
 
                     if 'matched_centroids' in solution:
                         # Draw a green box around each matched star.
