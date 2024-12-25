@@ -16,6 +16,7 @@ EXAMPLES_DIR = Path(__file__).parent
 
 import tetra3
 
+# centre is (y, x).
 def draw_circle(img_draw, centre, radius, **kwargs):
     bbox = [centre[1] - radius, centre[0] - radius, centre[1] + radius, centre[0] + radius]
     img_draw.ellipse(bbox, **kwargs)
@@ -43,7 +44,6 @@ path = EXAMPLES_DIR / 'data' / 'medium_fov'
 # path = EXAMPLES_DIR / 'data' / 'large_fov'
 try:
     for impath in path.glob('*'):
-    # for impath in path.glob('img_110ms_20241209_042605.bmp'):
         try:
             with Image.open(str(impath)) as img:
                 img = img.convert(mode='L')
@@ -81,19 +81,26 @@ try:
                     trimmed_centroids = centroids[:30]
                     solution = t3.solve_from_centroids(
                         trimmed_centroids, (height, width),
-                        return_matches=True, solve_timeout=5000,
+                        return_matches=True, return_catalog=True, solve_timeout=5000,
                         distortion=0)
 
                     if 'matched_centroids' in solution:
                         # Draw a green box around each matched star.
                         for cent in solution['matched_centroids']:
-                            draw_box(img_draw, cent, 6, outline=(32, 192, 32))
+                            draw_box(img_draw, cent, 7, outline=(32, 192, 32))
                         # Draw a red box around each pattern star.
                         for cent in solution['pattern_centroids']:
-                            draw_box(img_draw, cent, 6, outline=(192, 32, 32))
+                            draw_box(img_draw, cent, 7, outline=(192, 32, 32))
+
+                    if 'catalog_stars' in solution:
+                        # Draw a yellow box around each catalog star.
+                        for star in solution['catalog_stars']:
+                            # star is (RA, Dec, mag, y, x).
+                            draw_box(img_draw, [star[3], star[4]], 5, outline=(192, 192, 32))
 
                     # Don't clutter printed solution with these fields.
                     solution.pop('matched_centroids', None)
+                    solution.pop('catalog_stars', None)
                     solution.pop('matched_stars', None)
                     solution.pop('matched_catID', None)
                     solution.pop('pattern_centroids', None)
