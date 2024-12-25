@@ -1556,7 +1556,8 @@ class Tetra3():
     def solve_from_centroids(self, star_centroids, size, fov_estimate=None, fov_max_error=None,
                              match_radius=.01, match_threshold=1e-4,
                              solve_timeout=5000, target_pixel=None, target_sky_coord=None, distortion=0,
-                             return_matches=False, return_visual=False, return_rotation_matrix=False,
+                             return_matches=False, return_catalog=False,
+                             return_visual=False, return_rotation_matrix=False,
                              match_max_error=.002, pattern_checking_stars=None):
         """Solve for the sky location using a list of centroids.
 
@@ -1607,6 +1608,8 @@ class Tetra3():
                  Default 0.
             return_matches (bool, optional): If set to True, the catalogue entries of the matched
                 stars and their pixel coordinates in the image is returned.
+            return_catalog (bool, optional): If set to True, information about catalog stars in
+                the image's FOV is returned.
             return_visual (bool, optional): If set to True, an image is returned that visualises
                 the solution.
             return_rotation_matrix (bool, optional): If True, the 3x3 rotation matrix is returned.
@@ -1652,6 +1655,8 @@ class Tetra3():
                 - 'matched_catID': The catalogue ID corresponding to each matched star. See
                   Tetra3.star_catalog_IDs for information on the format. Not included if
                   return_matches=False.
+                - 'catalog_stars': A list of tuples (RA, Dec, magnitude, y, x). RA/Dec in degrees.
+                  Not included if return_catalog=False.
                 - 'pattern_centroids': similar to matched_centroids, except just for the pattern
                   stars. Not included if return_matches=False.
                 - 'visual': A PIL image with spots for the given centroids in white, the coarse
@@ -1677,7 +1682,7 @@ class Tetra3():
                            + str((len(star_centroids), size, fov_estimate, fov_max_error,
                                   match_radius, match_threshold,
                                   solve_timeout, target_pixel, target_sky_coord, distortion,
-                                  return_matches, return_visual, match_max_error)))
+                                  return_matches, return_catalog, return_visual, match_max_error)))
         if fov_estimate is None:
             # If no FOV given at all, guess middle of the range for a start
             fov_initial = np.deg2rad((self._db_props['max_fov'] + self._db_props['min_fov'])/2)
@@ -1704,6 +1709,7 @@ class Tetra3():
                 # Make shape (2,) array to (1,2), to match (N,2) pattern
                 target_sky_coord = target_sky_coord[None, :]
         return_matches = bool(return_matches)
+        return_catalog = bool(return_catalog)
 
         # extract height (y) and width (x) of image
         (height, width) = size[:2]
@@ -1900,33 +1906,34 @@ class Tetra3():
                     rotation_matrix = _find_rotation_matrix(image_pattern_vectors,
                                                             catalog_pattern_vectors)
 
-                    # Find all star vectors inside the (diagonal) field of view for matching, in
-                    # catalog brightness order.
+                    # Find all catalog star vectors inside the (diagonal) field of view for
+                    # matching, in catalog brightness order.
                     image_center_vector = rotation_matrix[0, :]
                     fov_diagonal_rad = fov * np.sqrt(width**2 + height**2) / width
-                    nearby_star_inds = self._get_nearby_stars(image_center_vector, fov_diagonal_rad/2)
-                    nearby_star_vectors = self.star_table[nearby_star_inds, 2:5]
+                    nearby_cat_star_inds = self._get_nearby_catalog_stars(
+                        image_center_vector, fov_diagonal_rad/2)
+                    nearby_cat_star_vectors = self.star_table[nearby_cat_star_inds, 2:5]
 
-                    # Derotate nearby stars and get their (undistorted) centroids using coarse fov
-                    nearby_star_vectors_derot = np.dot(rotation_matrix, nearby_star_vectors.T).T
-                    (nearby_star_centroids, kept) = _compute_centroids(nearby_star_vectors_derot,
-                                                                       (height, width), fov)
-                    nearby_star_centroids = nearby_star_centroids[kept, :]
-                    nearby_star_vectors = nearby_star_vectors[kept, :]
-                    nearby_star_inds = nearby_star_inds[kept]
+                    # Derotate nearby catalog stars and get their (undistorted) centroids using coarse fov
+                    nearby_cat_star_vectors_derot = np.dot(rotation_matrix, nearby_cat_star_vectors.T).T
+                    (nearby_cat_star_centroids, kept) = _compute_centroids(
+                        nearby_cat_star_vectors_derot, (height, width), fov)
+                    nearby_cat_star_centroids = nearby_cat_star_centroids[kept, :]
+                    nearby_cat_star_vectors = nearby_cat_star_vectors[kept, :]
+                    nearby_cat_star_inds = nearby_cat_star_inds[kept]
+                    num_nearby_catalog_stars = len(nearby_cat_star_centroids)
                     # Only keep as many nearby stars as the image centroids. The 2x "fudge factor"
                     # is because image centroids brightness rankings might not match the nearby star
                     # catalog brightness rankings, so keeping some extra nearby stars helps ensure
                     # more matches.
-                    nearby_star_centroids = nearby_star_centroids[:2*num_centroids]
-                    nearby_star_vectors = nearby_star_vectors[:2*num_centroids]
-                    nearby_star_inds = nearby_star_inds[:2*num_centroids]
+                    nearby_cat_star_centroids = nearby_cat_star_centroids[:2*num_centroids]
+                    nearby_cat_star_vectors = nearby_cat_star_vectors[:2*num_centroids]
+                    nearby_cat_star_inds = nearby_cat_star_inds[:2*num_centroids]
 
                     # Match the image centroids to the nearby star centroids.
                     matched_stars = _find_centroid_matches(
-                        image_centroids_undist, nearby_star_centroids, width*match_radius)
+                        image_centroids_undist, nearby_cat_star_centroids, width*match_radius)
                     num_extracted_stars = num_centroids
-                    num_nearby_catalog_stars = len(nearby_star_centroids)
                     num_star_matches = len(matched_stars)
                     self._logger.debug("Number of nearby stars: %d, total matched: %d" \
                                        % (num_nearby_catalog_stars, num_star_matches))
@@ -1935,7 +1942,7 @@ class Tetra3():
                     # that are stars)
                     prob_single_star_mismatch = num_nearby_catalog_stars * match_radius**2
                     # Probability that this rotation matrix's set of matches happen randomly
-                    # we subtract two degrees of fredom
+                    # we subtract two degrees of freedom
                     prob_mismatch = scipy.stats.binom.cdf(num_extracted_stars - (num_star_matches - 2),
                                                           num_extracted_stars,
                                                           1 - prob_single_star_mismatch)
@@ -1953,7 +1960,7 @@ class Tetra3():
                     matched_image_centroids_undist = image_centroids_undist[matched_stars[:, 0], :]
                     matched_image_vectors = _compute_vectors(matched_image_centroids_undist,
                                                              (height, width), fov)
-                    matched_catalog_vectors = nearby_star_vectors[matched_stars[:, 1], :]
+                    matched_catalog_vectors = nearby_cat_star_vectors[matched_stars[:, 1], :]
                     # Recompute rotation matrix for more accuracy. The earlier rotation
                     # matrix was calculated using the pattern stars; the recomputed rotation
                     # matrix uses all star matches, not just the pattern stars.
@@ -2092,13 +2099,29 @@ class Tetra3():
                     # If requested to return data about matches, append to dict
                     if return_matches:
                         match_data = self._get_matched_star_data(
-                            image_centroids[matched_stars[:, 0]], nearby_star_inds[matched_stars[:, 1]])
+                            image_centroids[matched_stars[:, 0]],
+                            nearby_cat_star_inds[matched_stars[:, 1]])
                         solution_dict.update(match_data)
 
                         pattern_centroids = []
                         for img_pat_ind in image_pattern_indices:
                             pattern_centroids.append(image_centroids[img_pat_ind])
                         solution_dict.update({'pattern_centroids': pattern_centroids})
+
+                    # If requested to return catalog stars in FOV, append to dict.
+                    if return_catalog:
+                        catalog_tuples = []
+                        for (i, centroid) in enumerate(nearby_cat_star_centroids):
+                            star_ind = nearby_cat_star_inds[i]
+                            ra = np.rad2deg(self.star_table[star_ind, 0])
+                            dec = np.rad2deg(self.star_table[star_ind, 1])
+                            mag = self.star_table[star_ind, 5]
+                            (y, x) = centroid
+                            if k is not None:
+                                dist_centroid = _distort_centroids([centroid], (height, width), k)
+                                (y, x) = dist_centroid[0]
+                            catalog_tuples.append( (ra, dec, mag, y, x) )
+                        solution_dict.update({'catalog_stars': catalog_tuples})
 
                     # If requested to create a visualisation, do so and append
                     if return_visual:
@@ -2107,7 +2130,7 @@ class Tetra3():
                         img_draw = ImageDraw.Draw(img)
                         # Make list of matched and not from catalogue
                         matched = matched_stars[:, 1]
-                        not_matched = np.array([True]*len(nearby_star_centroids))
+                        not_matched = np.array([True]*len(nearby_cat_star_centroids))
                         not_matched[matched] = False
                         not_matched = np.flatnonzero(not_matched)
 
@@ -2132,11 +2155,11 @@ class Tetra3():
                             draw_circle(cent, 1, fill='green')
                         for match in matched:
                             # Green circle for succeessful match
-                            draw_circle(nearby_star_centroids[match],
+                            draw_circle(nearby_cat_star_centroids[match],
                                         width*match_radius, outline='green')
                         for match in not_matched:
                             # Red circle for failed match
-                            draw_circle(nearby_star_centroids[match],
+                            draw_circle(nearby_cat_star_centroids[match],
                                         width*match_radius, outline='red')
 
                         solution_dict['visual'] = img
@@ -2213,7 +2236,7 @@ class Tetra3():
 
         return (catalog_pattern_edges, catalog_pattern_vectors)
 
-    def _get_nearby_stars(self, vector, radius):
+    def _get_nearby_catalog_stars(self, vector, radius):
         """Get star indices within radius radians of the vector. Sorted brightest first."""
         max_dist = _distance_from_angle(radius)
         nearby = self._star_kd_tree.query_ball_point(vector, max_dist)
