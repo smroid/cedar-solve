@@ -68,7 +68,7 @@ def benchmark_synthetic_fovs(width, height, fov_deg, num_fovs,
         if ra < 0:
             ra += 2 * np.pi
 
-        nearby_star_inds = t3._get_nearby_stars(center_vec, diag_fov / 2)
+        nearby_star_inds = t3._get_nearby_catalog_stars(center_vec, diag_fov / 2)
         nearby_stars = t3.star_table[nearby_star_inds]
 
         nearby_ra = nearby_stars.transpose()[0]
