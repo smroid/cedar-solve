@@ -1973,13 +1973,6 @@ class Tetra3():
                     roll = np.rad2deg(np.arctan2(rotation_matrix[1, 2],
                                                  rotation_matrix[2, 2])) % 360
 
-                    # Re-apply refined rotation matrix to nearby_cat_star_vectors.
-                    nearby_cat_star_vectors_derot = np.dot(rotation_matrix, nearby_cat_star_vectors.T).T
-                    (nearby_cat_star_centroids, kept) = _compute_centroids(
-                        nearby_cat_star_vectors_derot, (height, width), fov)
-                    nearby_cat_star_centroids = nearby_cat_star_centroids[kept, :]
-                    nearby_cat_star_inds = nearby_cat_star_inds[kept]
-
                     if distortion is None:
                         # Compare mutual angles in catalogue to those with current
                         # FOV estimate in order to scale accurately for fine FOV
@@ -2015,6 +2008,13 @@ class Tetra3():
                         # Re-undistort centroids for final calculations
                         image_centroids_undist = _undistort_centroids(image_centroids, (height, width), k)
                         matched_image_centroids_undist = image_centroids_undist[matched_stars[:, 0], :]
+
+                    # Re-apply refined rotation matrix and FOV to nearby_cat_star_vectors.
+                    nearby_cat_star_vectors_derot = np.dot(rotation_matrix, nearby_cat_star_vectors.T).T
+                    (nearby_cat_star_centroids, kept) = _compute_centroids(
+                        nearby_cat_star_vectors_derot, (height, width), fov)
+                    nearby_cat_star_centroids = nearby_cat_star_centroids[kept, :]
+                    nearby_cat_star_inds = nearby_cat_star_inds[kept]
 
                     # Get vectors
                     final_match_vectors = _compute_vectors(
