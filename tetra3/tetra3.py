@@ -1921,7 +1921,6 @@ class Tetra3():
                     nearby_cat_star_centroids = nearby_cat_star_centroids[kept, :]
                     nearby_cat_star_vectors = nearby_cat_star_vectors[kept, :]
                     nearby_cat_star_inds = nearby_cat_star_inds[kept]
-                    num_nearby_catalog_stars = len(nearby_cat_star_centroids)
                     # Only keep as many nearby stars as the image centroids. The 2x "fudge factor"
                     # is because image centroids brightness rankings might not match the nearby star
                     # catalog brightness rankings, so keeping some extra nearby stars helps ensure
@@ -1929,6 +1928,7 @@ class Tetra3():
                     nearby_cat_star_centroids = nearby_cat_star_centroids[:2*num_centroids]
                     nearby_cat_star_vectors = nearby_cat_star_vectors[:2*num_centroids]
                     nearby_cat_star_inds = nearby_cat_star_inds[:2*num_centroids]
+                    num_nearby_catalog_stars = len(nearby_cat_star_centroids)
 
                     # Match the image centroids to the nearby star centroids.
                     matched_stars = _find_centroid_matches(
@@ -1972,6 +1972,13 @@ class Tetra3():
                                                 norm(rotation_matrix[1:3, 2])))
                     roll = np.rad2deg(np.arctan2(rotation_matrix[1, 2],
                                                  rotation_matrix[2, 2])) % 360
+
+                    # Re-apply refined rotation matrix to nearby_cat_star_vectors.
+                    nearby_cat_star_vectors_derot = np.dot(rotation_matrix, nearby_cat_star_vectors.T).T
+                    (nearby_cat_star_centroids, kept) = _compute_centroids(
+                        nearby_cat_star_vectors_derot, (height, width), fov)
+                    nearby_cat_star_centroids = nearby_cat_star_centroids[kept, :]
+                    nearby_cat_star_inds = nearby_cat_star_inds[kept]
 
                     if distortion is None:
                         # Compare mutual angles in catalogue to those with current
