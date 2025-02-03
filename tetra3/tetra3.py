@@ -1779,8 +1779,6 @@ class Tetra3():
         # Find the possible range of edge ratio patterns these four image centroids
         # could correspond to.
         pattlen = int(math.factorial(p_size) / 2 / math.factorial(p_size - 2) - 1)
-        image_pattern_edge_ratio_min = np.ones(pattlen)
-        image_pattern_edge_ratio_max = np.zeros(pattlen)
 
         catalog_lookup_count = 0
         catalog_eval_count = 0
@@ -1807,7 +1805,7 @@ class Tetra3():
                 break
 
             # Set largest distance to None, this is cached to avoid recalculating in future FOV estimation.
-            pattern_largest_distance = None
+            image_pattern_largest_distance = None
 
             image_pattern_vectors = image_centroids_vectors[image_pattern_indices, :]
             # Calculate what the edge ratios are and broaden by p_max_err tolerance
@@ -1861,7 +1859,8 @@ class Tetra3():
                 for index in valid_patterns:
                     catalog_eval_count += 1
 
-                    # Estimate coarse FOV from the pattern
+                    # Compute the FOV that our image_pattern would yield if it were to
+                    # match this pattern.
                     catalog_largest_edge = all_catalog_largest_edges[index]
                     if fov_estimate is not None:
                         # Can quickly correct FOV by scaling given estimate
@@ -1870,18 +1869,14 @@ class Tetra3():
                         # Use camera projection to calculate coarse fov
                         # The FOV estimate will be the same for each attempt with this pattern
                         # so we can cache the value by checking if we have already set it
-                        if pattern_largest_distance is None:
-                            pattern_largest_distance = np.max(
+                        if image_pattern_largest_distance is None:
+                            image_pattern_largest_distance = np.max(
                                 pdist(image_centroids_undist[image_pattern_indices, :]))
-                        f = pattern_largest_distance / 2 / np.tan(catalog_largest_edge/2)
+                        f = image_pattern_largest_distance / 2 / np.tan(catalog_largest_edge/2)
                         fov = 2*np.arctan(width/2/f)
 
-                    # If the FOV is incorrect we can skip this immediately
-                    if fov_estimate is not None and fov_max_error is not None \
-                       and abs(fov - fov_estimate) > fov_max_error:
-                        continue
-
-                    # Recalculate vectors and uniquely sort them by distance from centroid
+                    # Recalculate vectors using coarse FOV and uniquely sort them by
+                    # distance from centroid
                     image_pattern_vectors = _compute_vectors(
                         image_centroids_undist[image_pattern_indices, :], (height, width), fov)
                     # find the centroid, or average position, of the star pattern
