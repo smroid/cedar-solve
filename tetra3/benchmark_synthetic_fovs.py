@@ -47,7 +47,7 @@ def benchmark_synthetic_fovs(width, height, fov_deg, num_fovs,
     scale_factor = width / 2 / np.tan(np.deg2rad(fov_deg) / 2)
 
     # Histogram of successful solve times.
-    NUM_HISTO_BINS = 200
+    NUM_HISTO_BINS = 1000
     MAX_SOLVE_TIME_MS = 1000
     solve_time_histo = [0] * NUM_HISTO_BINS
     bin_width = MAX_SOLVE_TIME_MS / NUM_HISTO_BINS
@@ -111,7 +111,8 @@ def benchmark_synthetic_fovs(width, height, fov_deg, num_fovs,
 
         solution = t3.solve_from_centroids(centroids, size=(height, width), distortion=0,
                                            fov_estimate=fov_deg, fov_max_error=fov_deg/10.0)
-        if iter_count % 1000 == 0:
+        # Print progress 10 times.
+        if iter_count % (num_fovs / 5) == 0:
             print(f'iter {iter_count}; solution for ra/dec {np.rad2deg(ra):.4f}/{np.rad2deg(dec):.4f}: {solution}')
 
         if solution['RA'] is None:
