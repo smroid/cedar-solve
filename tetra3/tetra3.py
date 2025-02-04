@@ -295,8 +295,8 @@ def _find_centroid_matches(image_centroids, catalog_centroids, r):
     dists = cdist(image_centroids, catalog_centroids)
     matches = np.argwhere(dists < r)
     # Make sure we only have unique 1-1 matches
-    matches = matches[np.unique(matches[:, 0], return_index=True)[1], :]
     matches = matches[np.unique(matches[:, 1], return_index=True)[1], :]
+    matches = matches[np.unique(matches[:, 0], return_index=True)[1], :]
     return matches
 
 def _angle_from_distance(dist):
