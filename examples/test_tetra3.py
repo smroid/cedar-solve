@@ -81,8 +81,8 @@ try:
                     trimmed_centroids = centroids[:30]
                     solution = t3.solve_from_centroids(
                         trimmed_centroids, (height, width),
-                        return_matches=True, return_catalog=True, solve_timeout=5000,
-                        distortion=0)
+                        return_matches=False, return_catalog=False,
+                        solve_timeout=5000, distortion=0)
 
                     if 'matched_centroids' in solution:
                         # Draw a green box around each matched star.
@@ -106,7 +106,6 @@ try:
                     solution.pop('pattern_centroids', None)
                     solution.pop('epoch_equinox', None)
                     solution.pop('epoch_proper_motion', None)
-                    solution.pop('cache_hit_fraction', None)
                     print('Solution %s' % solution)
 
                 name, ext = os.path.splitext(basename)
