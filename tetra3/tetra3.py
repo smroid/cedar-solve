@@ -2000,7 +2000,7 @@ class Tetra3():
                         self._logger.debug('Calculated focal length to %.2f and distortion to %.3f' % (f, k))
                         # Calculate (horizontal) true field of view
                         fov = 2*np.arctan(1/f)
-                        # Re-undistort centroids for final calculations
+                        # Re-undistort centroids using updated distortion for final calculations
                         image_centroids_undist = _undistort_centroids(image_centroids, (height, width), k)
                         matched_image_centroids_undist = image_centroids_undist[matched_stars[:, 0], :]
 
@@ -2017,7 +2017,7 @@ class Tetra3():
                     # Rotate to the sky
                     final_match_vectors = np.dot(rotation_matrix.T, final_match_vectors.T).T
 
-                    # Calculate residual angles with more accurate formula
+                    # Calculate residual angles between image vectors and catalog vectors.
                     distance = norm(final_match_vectors - matched_catalog_vectors, axis=1)
                     distance.sort()
                     p90_index = int(0.9 * (len(distance)-1))
@@ -2064,7 +2064,6 @@ class Tetra3():
                             solution_dict['RA_target'] = target_ra[0]
                             solution_dict['Dec_target'] = target_dec[0]
 
-
                     # If we were given target sky coord(s), calculate their image x/y if
                     # within FOV.
                     if target_sky_coord is not None:
@@ -2081,7 +2080,10 @@ class Tetra3():
                         (target_centroids, kept) = _compute_centroids(target_sky_vectors_derot,
                                                                       (height, width), fov)
                         if k is not None:
-                            target_centroids = _distort_centroids(target_centroids, (height, width), k)
+                            for ind in kept:
+                                centroid = target_centroids[ind]
+                                target_centroids[ind] = _distort_centroids(
+                                    [centroid], (height, width), k)[0]
                         target_y = []
                         target_x = []
                         for i in range(target_centroids.shape[0]):
