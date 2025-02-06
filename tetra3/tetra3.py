@@ -1776,10 +1776,6 @@ class Tetra3():
         image_centroids_vectors = _compute_vectors(
             image_centroids_undist, (height, width), fov_initial)
 
-        # Find the possible range of edge ratio patterns these four image centroids
-        # could correspond to.
-        pattlen = int(math.factorial(p_size) / 2 / math.factorial(p_size - 2) - 1)
-
         catalog_lookup_count = 0
         catalog_eval_count = 0
         image_patterns_evaluated = 0
