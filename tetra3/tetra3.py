@@ -845,8 +845,7 @@ class Tetra3():
                           star_catalog='hip_main',
                           lattice_field_oversampling=100, patterns_per_lattice_field=50,
                           verification_stars_per_fov=150, star_max_magnitude=None,
-                          pattern_max_error=.001,
-                          presort_patterns=True, save_largest_edge=True,
+                          pattern_max_error=.001, save_largest_edge=True,
                           multiscale_step=1.5, epoch_proper_motion='now',
                           pattern_stars_per_fov=None, simplify_pattern=None):
         """Create a database and optionally save it to file.
@@ -975,9 +974,6 @@ class Tetra3():
                   pattern_bins = 0.25 / pattern_max_error
                 Default .001, corresponding to pattern_bins=250. For a database with limiting magnitude
                 7, this yields a reasonable pattern hash collision rate.
-            presort_patterns (bool, optional): If True (the default), all star patterns will be
-                sorted during database generation to avoid doing it when solving. Makes database
-                generation slower but the solver faster.
             save_largest_edge (bool, optional): If True (default), the absolute size of each
                 pattern is stored (via its largest edge angle) in a separate array. This makes the
                 database larger but the solver faster.
@@ -997,7 +993,7 @@ class Tetra3():
                            + str((max_fov, min_fov, save_as, star_catalog, lattice_field_oversampling,
                                   patterns_per_lattice_field, verification_stars_per_fov,
                                   star_max_magnitude, pattern_max_error,
-                                  presort_patterns, save_largest_edge,
+                                  save_largest_edge,
                                   multiscale_step, epoch_proper_motion)))
         if pattern_stars_per_fov is not None and pattern_stars_per_fov != lattice_field_oversampling:
             self._logger.warning(
@@ -1030,7 +1026,6 @@ class Tetra3():
             star_max_magnitude = float(star_max_magnitude)
         PATTERN_SIZE = 4
         pattern_bins = round(1/4/pattern_max_error)
-        presort_patterns = bool(presort_patterns)
         save_largest_edge = bool(save_largest_edge)
         if epoch_proper_motion is None or str(epoch_proper_motion).lower() == 'none':
             epoch_proper_motion = None
@@ -1310,19 +1305,19 @@ class Tetra3():
                     else:
                         is_novel_index = True
 
-            if presort_patterns:
-                # find the centroid, or average position, of the star pattern
-                pattern_centroid = list(map(lambda a : sum(a) / len(a), zip(*vectors)))
+            # Presort patterns.
+            # Find the centroid, or average position, of the star pattern.
+            pattern_centroid = list(map(lambda a : sum(a) / len(a), zip(*vectors)))
 
-                # calculate each star's radius, or Euclidean distance from the centroid
+            # Calculate each star's radius, or Euclidean distance from the centroid.
 
-                # Elements: (distance, index in pattern)
-                centroid_distances = [
-                    (sum((x1 - x2) * (x1 - x2) for (x1, x2) in zip(v, pattern_centroid)), index)
-                    for index, v in enumerate(vectors)]
-                centroid_distances.sort()
-                # use the radii to uniquely order the pattern, used for future matching
-                pattern = [pattern[i] for (_, i) in centroid_distances]
+            # Elements: (distance, index in pattern).
+            centroid_distances = [
+                (sum((x1 - x2) * (x1 - x2) for (x1, x2) in zip(v, pattern_centroid)), index)
+                for index, v in enumerate(vectors)]
+            centroid_distances.sort()
+            # Use the radii to uniquely order the pattern, used for future matching.
+            pattern = [pattern[i] for (_, i) in centroid_distances]
 
             (index, collision) = _insert_at_index(pattern, hash_index, pattern_catalog)
             if save_largest_edge:
@@ -1362,7 +1357,7 @@ class Tetra3():
         self._db_props['simplify_pattern'] = True  # legacy
         self._db_props['range_ra'] = None
         self._db_props['range_dec'] = None
-        self._db_props['presort_patterns'] = presort_patterns
+        self._db_props['presort_patterns'] = True
         self._db_props['num_patterns'] = len(pattern_list)
         self._logger.debug(self._db_props)
 

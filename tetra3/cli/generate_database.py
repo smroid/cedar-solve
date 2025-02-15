@@ -60,10 +60,6 @@ def main():
                              "edge ratios are each quantized: `pattern_bins = 0.25 / pattern_max_error` "
                              "Default 0.001, corresponding to pattern_bins=250. For a database with "
                              "limiting magnitude 7, this yields a reasonable pattern hash collision rate.")
-    parser.add_argument("--presort-patterns", type=bool, default=True,
-                        help="If True (the default), all star patterns will be sorted during database "
-                             "generation to avoid doing it when solving. Makes database generation "
-                             "slower but the solver faster.")
     parser.add_argument("--save-largest-edge", type=bool, default=True,
                         help="If True (default), the absolute size of each pattern is stored "
                              "(via its largest edge angle) in a separate array. This makes the database "
@@ -91,7 +87,6 @@ def main():
         verification_stars_per_fov=args.verification_stars_per_fov,
         star_max_magnitude=args.star_max_magnitude,
         pattern_max_error=args.pattern_max_error,
-        presort_patterns=args.presort_patterns,
         save_largest_edge=args.save_largest_edge,
         multiscale_step=args.multiscale_step,
         epoch_proper_motion=args.epoch_proper_motion,
