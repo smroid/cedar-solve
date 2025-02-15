@@ -60,10 +60,6 @@ def main():
                              "edge ratios are each quantized: `pattern_bins = 0.25 / pattern_max_error` "
                              "Default 0.001, corresponding to pattern_bins=250. For a database with "
                              "limiting magnitude 7, this yields a reasonable pattern hash collision rate.")
-    parser.add_argument("--save-largest-edge", type=bool, default=True,
-                        help="If True (default), the absolute size of each pattern is stored "
-                             "(via its largest edge angle) in a separate array. This makes the database "
-                             "larger but the solver faster.")
     parser.add_argument("--multiscale-step", type=float, default=1.5,
                         help="Determines the largest ratio between subsequent FOVs that is allowed "
                              "when generating a multiscale database. If the ratio max_fov/min_fov "
@@ -87,7 +83,6 @@ def main():
         verification_stars_per_fov=args.verification_stars_per_fov,
         star_max_magnitude=args.star_max_magnitude,
         pattern_max_error=args.pattern_max_error,
-        save_largest_edge=args.save_largest_edge,
         multiscale_step=args.multiscale_step,
         epoch_proper_motion=args.epoch_proper_motion,
     )

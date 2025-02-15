@@ -845,7 +845,7 @@ class Tetra3():
                           star_catalog='hip_main',
                           lattice_field_oversampling=100, patterns_per_lattice_field=50,
                           verification_stars_per_fov=150, star_max_magnitude=None,
-                          pattern_max_error=.001, save_largest_edge=True,
+                          pattern_max_error=.001,
                           multiscale_step=1.5, epoch_proper_motion='now',
                           pattern_stars_per_fov=None, simplify_pattern=None):
         """Create a database and optionally save it to file.
@@ -974,9 +974,6 @@ class Tetra3():
                   pattern_bins = 0.25 / pattern_max_error
                 Default .001, corresponding to pattern_bins=250. For a database with limiting magnitude
                 7, this yields a reasonable pattern hash collision rate.
-            save_largest_edge (bool, optional): If True (default), the absolute size of each
-                pattern is stored (via its largest edge angle) in a separate array. This makes the
-                database larger but the solver faster.
             multiscale_step (float, optional): Determines the largest ratio between subsequent FOVs
                 that is allowed when generating a multiscale database. Defaults to 1.5. If the ratio
                 max_fov/min_fov is less than sqrt(multiscale_step) a single scale database is built.
@@ -993,7 +990,6 @@ class Tetra3():
                            + str((max_fov, min_fov, save_as, star_catalog, lattice_field_oversampling,
                                   patterns_per_lattice_field, verification_stars_per_fov,
                                   star_max_magnitude, pattern_max_error,
-                                  save_largest_edge,
                                   multiscale_step, epoch_proper_motion)))
         if pattern_stars_per_fov is not None and pattern_stars_per_fov != lattice_field_oversampling:
             self._logger.warning(
@@ -1026,7 +1022,6 @@ class Tetra3():
             star_max_magnitude = float(star_max_magnitude)
         PATTERN_SIZE = 4
         pattern_bins = round(1/4/pattern_max_error)
-        save_largest_edge = bool(save_largest_edge)
         if epoch_proper_motion is None or str(epoch_proper_motion).lower() == 'none':
             epoch_proper_motion = None
             self._logger.debug('Proper motions will not be considered')
@@ -1262,9 +1257,8 @@ class Tetra3():
         self._logger.info('Catalog size %s and type %s.' %
                           (pattern_catalog.shape, pattern_catalog.dtype))
 
-        if save_largest_edge:
-            pattern_largest_edge = np.zeros(catalog_length, dtype=np.float16)
-            self._logger.info('Storing largest edges as type %s' % pattern_largest_edge.dtype)
+        pattern_largest_edge = np.zeros(catalog_length, dtype=np.float16)
+        self._logger.info('Storing largest edges as type %s' % pattern_largest_edge.dtype)
 
         # Gather collision information.
         pattern_hashes_seen = set()
@@ -1320,9 +1314,8 @@ class Tetra3():
             pattern = [pattern[i] for (_, i) in centroid_distances]
 
             (index, collision) = _insert_at_index(pattern, hash_index, pattern_catalog)
-            if save_largest_edge:
-                # Store as milliradian to better use float16 range
-                pattern_largest_edge[index] = largest_angle*1000
+            # Store as milliradian to better use float16 range
+            pattern_largest_edge[index] = largest_angle*1000
             if is_novel_index and collision:
                 table_collisions += 1
 
@@ -1336,8 +1329,7 @@ class Tetra3():
         self._star_kd_tree = vector_kd_tree
         self._star_catalog_IDs = star_catID
         self._pattern_catalog = pattern_catalog
-        if save_largest_edge:
-            self._pattern_largest_edge = pattern_largest_edge
+        self._pattern_largest_edge = pattern_largest_edge
         self._db_props['pattern_mode'] = 'edge_ratio'
         self._db_props['pattern_size'] = PATTERN_SIZE
         self._db_props['pattern_bins'] = pattern_bins
