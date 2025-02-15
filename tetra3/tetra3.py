@@ -752,7 +752,7 @@ class Tetra3():
                 mu_delta = float(entry[6])
 
                 # See notes below.
-                if cos_delta > 0.1:
+                if cos_delta > 0.05:
                     mu_alpha = mu_alpha_cos_delta / cos_delta
                 else:
                     mu_alpha = 0
@@ -806,10 +806,10 @@ class Tetra3():
                         # Section 1.2.9 of the cdsarc.u-strasbg document cited above
                         # outlines a change of coordinate system that can overcome
                         # this problem; we simply punt on proper motion near the poles.
-                        if cos_delta > 0.1:
+                        if cos_delta > 0.05:
                             mu_alpha = mu_alpha_cos_delta / cos_delta
                         else:
-                            # abs(dec) > ~84 degrees. Ignore proper motion.
+                            # abs(dec) > ~87 degrees. Ignore proper motion.
                             mu_alpha = 0
                             mu_delta = 0
 
