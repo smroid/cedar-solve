@@ -42,15 +42,15 @@ def main():
     parser.add_argument("--min-fov", type=float,
                         help="Minimum FOV considered when the catalogue density is trimmed to size.")
     parser.add_argument("--lattice-field-oversampling", type=int, default=100,
-                        help="When uniformly distributing pattern generation fields over the celestial sphere, "
-                             "this determines the overlap factor.")
+                        help="When uniformly distributing pattern generation fields over the "
+                             "celestial sphere, this determines the overlap factor.")
     parser.add_argument("--patterns-per-lattice-field", type=int, default=50,
                         help="The number of patterns generated for each lattice field. "
                              "Typical values are 20 to 100.")
     parser.add_argument("--verification-stars-per-fov", type=int, default=150,
                         help="Target number of stars used for generating patterns in each FOV region. "
-                             "Also used to limit the number of stars considered for matching in solve images. "
-                             "Typical values are large.")
+                             "Also used to limit the number of stars considered for matching in "
+                             "solve images. Typical values are large.")
     parser.add_argument("--star-max-magnitude", type=float,
                         help="Dimmest apparent magnitude of stars retained from star catalog. "
                              "When not specified causes the limiting magnitude to be computed based on "
@@ -60,14 +60,6 @@ def main():
                              "edge ratios are each quantized: `pattern_bins = 0.25 / pattern_max_error` "
                              "Default 0.001, corresponding to pattern_bins=250. For a database with "
                              "limiting magnitude 7, this yields a reasonable pattern hash collision rate.")
-    parser.add_argument("--range-ra", type=_tuple_type(float),
-                        help="Tuple with the range (min_ra, max_ra) in degrees (0 to 360). "
-                             "Given as a comma separated string."
-                             "If set, only stars within the given right ascension will be kept in the database.")
-    parser.add_argument("--range-dec", type=_tuple_type(float),
-                        help="Tuple with the range (min_dec, max_dec) in degrees (-90 to 90). "
-                             "Given as a comma separated string."
-                             "If set, only stars within the give declination will be kept in the database.")
     parser.add_argument("--presort-patterns", type=bool, default=True,
                         help="If True (the default), all star patterns will be sorted during database "
                              "generation to avoid doing it when solving. Makes database generation "
@@ -99,8 +91,6 @@ def main():
         verification_stars_per_fov=args.verification_stars_per_fov,
         star_max_magnitude=args.star_max_magnitude,
         pattern_max_error=args.pattern_max_error,
-        range_ra=args.range_ra,
-        range_dec=args.range_dec,
         presort_patterns=args.presort_patterns,
         save_largest_edge=args.save_largest_edge,
         multiscale_step=args.multiscale_step,

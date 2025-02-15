@@ -187,7 +187,8 @@ def _pattern_hash_to_index(pattern_hash, bin_factor, max_index):
         combined = np.sum(pattern_hash*bin_factor**np.arange(len(pattern_hash), dtype=np.uint64),
                           dtype=np.uint64)
     else:
-        combined = np.sum(pattern_hash*bin_factor**np.arange(pattern_hash.shape[1], dtype=np.uint64)[None, :],
+        combined = np.sum(pattern_hash*bin_factor**np.arange(pattern_hash.shape[1],
+                                                             dtype=np.uint64)[None, :],
                           axis=1, dtype=np.uint64)
     with np.errstate(over='ignore'):
         combined = (combined*_MAGIC_RAND) % max_index
@@ -506,10 +507,8 @@ class Tetra3():
               but could be 1950 for old Bright Star Catalog versions.
             - 'epoch_proper_motion': year to which stellar proper motions have been propagated.
             - 'presort_patterns': Indicates if the pattern indices are sorted by distance to the centroid.
-            - 'range_ra': The portion of the sky in right ascension (min, max) that is in the database
-              (degrees 0 to 360). If None, the whole sky is included.
-            - 'range_dec': The portion of the sky in declination (min, max) that is in the database
-              (degrees -90 to 90). If None, the whole sky is included.
+            - 'range_ra': Always None, no longer used. The whole sky is included in the database.
+            - 'range_dec': Always None, no longer used. The whole sky is included in the database.
             - 'num_patterns': The number of patterns in the database. If None, this is one
               half of the pattern table size.
         """
@@ -663,7 +662,7 @@ class Tetra3():
         np.savez_compressed(path, **to_save)
 
     @staticmethod
-    def _load_catalog(star_catalog, catalog_file_full_pathname, range_ra, range_dec, epoch_proper_motion, logger):
+    def _load_catalog(star_catalog, catalog_file_full_pathname, epoch_proper_motion, logger):
         """Loads the star catalog and returns at tuple of:
         star_table: an array of [ra, dec, 0, 0, 0, mag]
         star_catID: array of catalog IDs for the entries in star_table
@@ -840,46 +839,13 @@ class Tetra3():
             star_catID = star_catID[kept, :][brightness_ii, :]
 
         logger.info('Loaded %d stars' % num_entries)
-
-        # If desired, clip out only a specific range of ra and/or dec for a partial coverage database
-        if range_ra is not None:
-            range_ra = np.deg2rad(range_ra)
-            if range_ra[0] < range_ra[1]: # Range does not cross 360deg discontinuity
-                kept = np.logical_and(star_table[:, 0] > range_ra[0], star_table[:, 0] < range_ra[1])
-            else:
-                kept = np.logical_or(star_table[:, 0] > range_ra[0], star_table[:, 0] < range_ra[1])
-            star_table = star_table[kept, :]
-            num_entries = star_table.shape[0]
-            # Trim down catalogue ID to match
-            if star_catalog in ('bsc5', 'hip_main'):
-                star_catID = star_catID[kept]
-            else:
-                star_catID = star_catID[kept, :]
-            logger.info('Limited to RA range %s, keeping %s stars.' %
-                              (np.rad2deg(range_ra), num_entries))
-        if range_dec is not None:
-            range_dec = np.deg2rad(range_dec)
-            if range_dec[0] < range_dec[1]: # Range does not cross +/-90deg discontinuity
-                kept = np.logical_and(star_table[:, 1] > range_dec[0], star_table[:, 1] < range_dec[1])
-            else:
-                kept = np.logical_or(star_table[:, 1] > range_dec[0], star_table[:, 1] < range_dec[1])
-            star_table = star_table[kept, :]
-            num_entries = star_table.shape[0]
-            # Trim down catalogue ID to match
-            if star_catalog in ('bsc5', 'hip_main'):
-                star_catID = star_catID[kept]
-            else:
-                star_catID = star_catID[kept, :]
-            logger.info('Limited to DEC range %s, keeping %s stars.' %
-                              (np.rad2deg(range_dec), num_entries))
-
         return (star_table, star_catID, epoch_equinox)
 
     def generate_database(self, max_fov, min_fov=None, save_as=None,
                           star_catalog='hip_main',
                           lattice_field_oversampling=100, patterns_per_lattice_field=50,
                           verification_stars_per_fov=150, star_max_magnitude=None,
-                          pattern_max_error=.001, range_ra=None, range_dec=None,
+                          pattern_max_error=.001,
                           presort_patterns=True, save_largest_edge=True,
                           multiscale_step=1.5, epoch_proper_motion='now',
                           pattern_stars_per_fov=None, simplify_pattern=None):
@@ -1009,10 +975,6 @@ class Tetra3():
                   pattern_bins = 0.25 / pattern_max_error
                 Default .001, corresponding to pattern_bins=250. For a database with limiting magnitude
                 7, this yields a reasonable pattern hash collision rate.
-            range_ra (tuple, optional): Tuple with the range (min_ra, max_ra) in degrees (0 to 360).
-                If set, only stars within the given right ascension will be kept in the database.
-            range_dec (tuple, optional): Tuple with the range (min_dec, max_dec) in degrees (-90 to 90).
-                If set, only stars within the give declination will be kept in the database.
             presort_patterns (bool, optional): If True (the default), all star patterns will be
                 sorted during database generation to avoid doing it when solving. Makes database
                 generation slower but the solver faster.
@@ -1035,7 +997,7 @@ class Tetra3():
                            + str((max_fov, min_fov, save_as, star_catalog, lattice_field_oversampling,
                                   patterns_per_lattice_field, verification_stars_per_fov,
                                   star_max_magnitude, pattern_max_error,
-                                  range_ra, range_dec, presort_patterns, save_largest_edge,
+                                  presort_patterns, save_largest_edge,
                                   multiscale_step, epoch_proper_motion)))
         if pattern_stars_per_fov is not None and pattern_stars_per_fov != lattice_field_oversampling:
             self._logger.warning(
@@ -1084,8 +1046,6 @@ class Tetra3():
         star_table, star_catID, epoch_equinox = Tetra3._load_catalog(
             star_catalog,
             catalog_file_full_pathname,
-            range_ra,
-            range_dec,
             epoch_proper_motion,
             self._logger,
         )
@@ -1254,9 +1214,6 @@ class Tetra3():
             for lattice_field_center_vector in fibonacci_sphere_lattice(n):
                 # Find all pattern stars within lattice field.
                 field_pattern_stars = pattern_kd_tree.query_ball_point(lattice_field_center_vector, fov_dist)
-                if (range_ra is not None or range_dec is not None) and \
-                   len(field_pattern_stars) < verification_stars_per_fov / 4:
-                    continue  # Partial field due to range_ra and/or range_dec.
                 min_stars_per_lattice_field = min(len(field_pattern_stars), min_stars_per_lattice_field)
                 total_field_pattern_stars += len(field_pattern_stars)
                 num_lattice_fields += 1
@@ -1403,8 +1360,8 @@ class Tetra3():
         self._db_props['verification_stars_per_fov'] = verification_stars_per_fov
         self._db_props['star_max_magnitude'] = star_max_magnitude
         self._db_props['simplify_pattern'] = True  # legacy
-        self._db_props['range_ra'] = range_ra
-        self._db_props['range_dec'] = range_dec
+        self._db_props['range_ra'] = None
+        self._db_props['range_dec'] = None
         self._db_props['presort_patterns'] = presort_patterns
         self._db_props['num_patterns'] = len(pattern_list)
         self._logger.debug(self._db_props)
