@@ -847,7 +847,7 @@ class Tetra3():
                           verification_stars_per_fov=150, star_max_magnitude=None,
                           pattern_max_error=.001,
                           multiscale_step=1.5, epoch_proper_motion='now',
-                          pattern_stars_per_fov=None, simplify_pattern=None):
+                          pattern_stars_per_fov=None):
         """Create a database and optionally save it to file.
 
         Takes a few minutes for a small (large FOV) database, can take many hours for a large
@@ -983,8 +983,6 @@ class Tetra3():
                 without proper motions to be used in the database.
             pattern_stars_per_fov (int, optional): Deprecated. If given, is used instead of
                 `lattice_field_oversampling`, which has similar values.
-            simplify_pattern: No longer meaningful, ignored.
-
         """
         self._logger.debug('Got generate pattern catalogue with input: '
                            + str((max_fov, min_fov, save_as, star_catalog, lattice_field_oversampling,
