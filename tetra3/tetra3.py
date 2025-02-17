@@ -147,18 +147,15 @@ _supported_databases = ('bsc5', 'hip_main', 'tyc_main')
 _lib_root = Path(__file__).parent
 
 def _insert_at_index(pattern, hash_index, table):
-    """Inserts to table with quadratic probing. Returns table index where pattern was inserted
-    and bool indicating whether a collision occurred."""
+    """Inserts to table with quadratic probing. Returns table index where pattern was inserted."""
     max_ind = np.uint64(table.shape[0])
     hash_index = np.uint64(hash_index)
-    collision = False
     for c in itertools.count():
         c = np.uint64(c)
         i = (hash_index + c*c) % max_ind
         if all(table[i, :] == 0):
             table[i, :] = pattern
-            return (i, collision)
-        collision = True
+            return i
 
 def _get_table_indices_from_hash(hash_index, table):
     """Gets from table with quadratic probing, returns list of all possibly matching indices."""
@@ -397,9 +394,10 @@ class Tetra3():
         self._verification_catalog = None
         self._cancelled = False
 
-        self._db_props = {'pattern_mode': None, 'pattern_size': None, 'pattern_bins': None,
-                          'pattern_max_error': None, 'max_fov': None, 'min_fov': None,
-                          'star_catalog': None, 'epoch_equinox': None, 'epoch_proper_motion': None,
+        self._db_props = {'pattern_mode': None, 'hash_table_type': None,
+                          'pattern_size': None, 'pattern_bins': None, 'pattern_max_error': None,
+                          'max_fov': None, 'min_fov': None, 'star_catalog': None,
+                          'epoch_equinox': None, 'epoch_proper_motion': None,
                           'lattice_field_oversampling': None, 'patterns_per_lattice_field': None,
                           'verification_stars_per_fov': None, 'star_max_magnitude': None,
                           'range_ra': None, 'range_dec': None, 'presort_patterns': None,
@@ -487,6 +485,8 @@ class Tetra3():
 
         Keys:
             - 'pattern_mode': Method used to identify star patterns. Is always 'edge_ratio'.
+            - 'hash_table_type': What algorithm is used for the pattern hash table. The only
+              value (currently) is 'quadratic_probe'.
             - 'pattern_size': Number of stars in each pattern.
             - 'pattern_bins': Number of bins per dimension in pattern catalog.
             - 'pattern_max_error': Maximum difference allowed in pattern for a match.
@@ -577,7 +577,8 @@ class Tetra3():
                     self._logger.debug('No num_patterns key, set to half of pattern_catalog size')
                 else:
                     self._db_props[key] = None
-                    self._logger.warning('Missing key in database (likely version difference): ' + str(key))
+                    self._logger.warning('Missing key in database (likely version difference): %s'
+                                         % str(key))
         if self._db_props['min_fov'] is None:
             self._logger.debug('No min_fov key, copy from max_fov')
             self._db_props['min_fov'] = self._db_props['max_fov']
@@ -606,6 +607,7 @@ class Tetra3():
 
         # Pack properties as numpy structured array
         props_packed = np.array((self._db_props['pattern_mode'],
+                                 self._db_props['hash_table_type'],
                                  self._db_props['pattern_size'],
                                  self._db_props['pattern_bins'],
                                  self._db_props['pattern_max_error'],
@@ -627,6 +629,7 @@ class Tetra3():
                                  self._db_props['presort_patterns'],
                                  self._db_props['num_patterns']),
                                 dtype=[('pattern_mode', 'U64'),
+                                       ('hash_table_type', 'U64'),
                                        ('pattern_size', np.uint16),
                                        ('pattern_bins', np.uint16),
                                        ('pattern_max_error', np.float32),
@@ -847,7 +850,7 @@ class Tetra3():
                           verification_stars_per_fov=150, star_max_magnitude=None,
                           pattern_max_error=.001,
                           multiscale_step=1.5, epoch_proper_motion='now',
-                          pattern_stars_per_fov=None):
+                          pattern_stars_per_fov=None, legacy_mode=False):
         """Create a database and optionally save it to file.
 
         Takes a few minutes for a small (large FOV) database, can take many hours for a large
@@ -940,7 +943,7 @@ class Tetra3():
         hash value being hashed (*) to form an index into the pattern array. Mapping the large space
         of possible pattern hash values to the modest range of pattern array indices induces further
         collisions, as does the open addressing hash algorithm used to manage the pattern array.
-        Because the pattern array is allocated to twice the number of patterns, the additional
+        Because the pattern array is allocated to thrice the number of patterns, the additional
         hashing and table collisions induced are modest.
 
         * We have two hashing concepts in play. The first is "geometric hashing" from the field of
@@ -983,12 +986,15 @@ class Tetra3():
                 without proper motions to be used in the database.
             pattern_stars_per_fov (int, optional): Deprecated. If given, is used instead of
                 `lattice_field_oversampling`, which has similar values.
+            legacy_mode (bool, optional): If True, uses 'quadratic_probe' for 'hash_table_type',
+                for compatibility with earlier versions of Tetra3. For new usages leave this as
+                False, to enable improved 'hash_table_type'.
         """
         self._logger.debug('Got generate pattern catalogue with input: '
                            + str((max_fov, min_fov, save_as, star_catalog, lattice_field_oversampling,
                                   patterns_per_lattice_field, verification_stars_per_fov,
                                   star_max_magnitude, pattern_max_error,
-                                  multiscale_step, epoch_proper_motion)))
+                                  multiscale_step, epoch_proper_motion, legacy_mode)))
         if pattern_stars_per_fov is not None and pattern_stars_per_fov != lattice_field_oversampling:
             self._logger.warning(
                 'pattern_stars_per_fov value %s is overriding lattice_field_oversampling value %s' %
@@ -1214,7 +1220,7 @@ class Tetra3():
                 patterns_this_lattice_field = 0
                 for pattern in breadth_first_combinations(field_pattern_stars, PATTERN_SIZE):
                     len_before = len(pattern_list)
-                    pattern_list.add(tuple(pattern))
+                    pattern_list.add(tuple(pattern))  # Add to set, deduping.
                     if len(pattern_list) > len_before:
                         total_added_patterns += 1
                         total_mag = sum(star_table[p, 5] for p in pattern)
@@ -1240,10 +1246,10 @@ class Tetra3():
         # Don't need this anymore.
         del pattern_kd_tree
 
-        # Create all patten hashes by calculating, sorting, and binning edge ratios; then compute
+        # Create all pattern hashes by calculating, sorting, and binning edge ratios; then compute
         # a table index hash from the pattern hash, and store the table index -> pattern mapping.
         self._logger.info('Start building catalogue.')
-        catalog_length = 3 * len(pattern_list)
+        catalog_length = int(1.2 * len(pattern_list))
         # Determine type to make sure the biggest index will fit, create pattern catalogue
         max_index = np.max(np.array(pattern_list))
         if max_index <= np.iinfo('uint8').max:
@@ -1261,9 +1267,6 @@ class Tetra3():
         # Gather collision information.
         pattern_hashes_seen = set()
         pattern_hash_collisions = 0
-        hash_indices_seen = set()
-        hash_index_collisions = 0
-        table_collisions = 0
 
         # Go through each pattern and insert to the catalogue
         for (pat_index, pattern) in enumerate(pattern_list):
@@ -1283,19 +1286,11 @@ class Tetra3():
             pattern_hash = [int(ratio * pattern_bins) for ratio in edge_ratios]
             hash_index = _pattern_hash_to_index(pattern_hash, pattern_bins, catalog_length)
 
-            is_novel_index = False
             if EVALUATE_COLLISIONS:
                 prev_len = len(pattern_hashes_seen)
                 pattern_hashes_seen.add(tuple(pattern_hash))
                 if prev_len == len(pattern_hashes_seen):
                     pattern_hash_collisions += 1
-                else:
-                    prev_len = len(hash_indices_seen)
-                    hash_indices_seen.add(hash_index)
-                    if prev_len == len(hash_indices_seen):
-                        hash_index_collisions += 1
-                    else:
-                        is_novel_index = True
 
             # Presort patterns.
             # Find the centroid, or average position, of the star pattern.
@@ -1311,24 +1306,31 @@ class Tetra3():
             # Use the radii to uniquely order the pattern, used for future matching.
             pattern = [pattern[i] for (_, i) in centroid_distances]
 
-            (index, collision) = _insert_at_index(pattern, hash_index, pattern_catalog)
+            index = _insert_at_index(pattern, hash_index, pattern_catalog)
             # Store as milliradian to better use float16 range
             pattern_largest_edge[index] = largest_angle*1000
-            if is_novel_index and collision:
-                table_collisions += 1
+
+        total_probes = 0
+        if EVALUATE_COLLISIONS:
+            # Evaluate average hash table probe count.
+            for pattern_hash in pattern_hashes_seen:
+                hash_index = _pattern_hash_to_index(pattern_hash, pattern_bins, catalog_length)
+                hash_match_inds = _get_table_indices_from_hash(hash_index, pattern_catalog)
+                total_probes += len(hash_match_inds)
 
         self._logger.info('Finished generating database.')
         self._logger.info('Size of uncompressed star table: %i Bytes.' %star_table.nbytes)
         self._logger.info('Size of uncompressed pattern catalog: %i Bytes.' %pattern_catalog.nbytes)
         if EVALUATE_COLLISIONS:
-            self._logger.info('Collisions: pattern hash %s, index %s, table %s' %
-                              (pattern_hash_collisions, hash_index_collisions, table_collisions))
+            self._logger.info('Pattern hash collisions: %s; average table probe len: %.2f'
+                              % (pattern_hash_collisions, total_probes / len(pattern_hashes_seen)))
         self._star_table = star_table
         self._star_kd_tree = vector_kd_tree
         self._star_catalog_IDs = star_catID
         self._pattern_catalog = pattern_catalog
         self._pattern_largest_edge = pattern_largest_edge
         self._db_props['pattern_mode'] = 'edge_ratio'
+        self._db_props['hash_table_type'] = 'quadratic_probe'
         self._db_props['pattern_size'] = PATTERN_SIZE
         self._db_props['pattern_bins'] = pattern_bins
         self._db_props['pattern_max_error'] = pattern_max_error
@@ -1347,7 +1349,7 @@ class Tetra3():
         self._db_props['simplify_pattern'] = True  # legacy
         self._db_props['range_ra'] = None
         self._db_props['range_dec'] = None
-        self._db_props['presort_patterns'] = True
+        self._db_props['presort_patterns'] = True  # legacy
         self._db_props['num_patterns'] = len(pattern_list)
         self._logger.debug(self._db_props)
 
@@ -1663,6 +1665,7 @@ class Tetra3():
             match_max_error = self._db_props['pattern_max_error']
         p_max_err = match_max_error
         presorted = self._db_props['presort_patterns']
+
         # Indices to extract from dot product matrix (above diagonal)
         upper_tri_index = np.triu_indices(p_size, 1)
 
@@ -1780,7 +1783,8 @@ class Tetra3():
 
                 (catalog_pattern_edges, all_catalog_pattern_vectors) = \
                     self._get_all_patterns_for_index(
-                        hash_index, upper_tri_index, image_pattern_largest_edge, fov_estimate, fov_max_error)
+                        hash_index, upper_tri_index, image_pattern_largest_edge,
+                        fov_estimate, fov_max_error)
                 if catalog_pattern_edges is None:
                     continue
                 catalog_lookup_count += len(catalog_pattern_edges)
@@ -2146,8 +2150,8 @@ class Tetra3():
         self._logger.debug('cancelling')
         self._cancelled = True
 
-    def _get_all_patterns_for_index(
-            self, hash_index, upper_tri_index, image_pattern_largest_edge, fov_estimate, fov_max_error):
+    def _get_all_patterns_for_index(self, hash_index, upper_tri_index,
+                                    image_pattern_largest_edge, fov_estimate, fov_max_error):
         """Returns (edges, vectors) for all pattern table entries for `hash_index`."""
 
         # Iterate over table hash indices.
