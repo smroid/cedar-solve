@@ -1249,7 +1249,7 @@ class Tetra3():
         # Create all pattern hashes by calculating, sorting, and binning edge ratios; then compute
         # a table index hash from the pattern hash, and store the table index -> pattern mapping.
         self._logger.info('Start building catalogue.')
-        catalog_length = int(1.2 * len(pattern_list))
+        catalog_length = int(3 * len(pattern_list))
         # Determine type to make sure the biggest index will fit, create pattern catalogue
         max_index = np.max(np.array(pattern_list))
         if max_index <= np.iinfo('uint8').max:
