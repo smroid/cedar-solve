@@ -199,31 +199,34 @@ def _get_table_indices_from_hash(hash_index, table, linear_probe):
         else:
             found.append(i)
 
-def _pattern_key_to_index(pattern_key, bin_factor, max_index, linear_probe):
-    """Get hash index for a given pattern_key (tuple of ordered binned edge ratios).
-    Can be length p list or n by p array."""
+def _compute_pattern_key_hash(pattern_key, bin_factor):
+    """Computes a 64 bit hash for a given pattern_key (tuple of ordered binned edge
+    ratios). Can be length p list or n by p array.
+    """
     pattern_key = np.uint64(pattern_key)
     bin_factor = np.uint64(bin_factor)
-    max_index = np.uint64(max_index)
-    # Combine pattern_key components to a single large number.
-
     # If p is the length of the pattern_key (default 5) and B is the number of bins
     # (default 50, calculated from max error), this will first give each pattern_key
     # a unique index from 0 to B^p-1.
     if pattern_key.ndim == 1:
-        combined = np.sum(pattern_key*bin_factor**np.arange(len(pattern_key),
-                                                            dtype=np.uint64),
-                          dtype=np.uint64)
+        return np.sum(pattern_key*bin_factor**np.arange(len(pattern_key),
+                                                        dtype=np.uint64),
+                      dtype=np.uint64)
     else:
-        combined = np.sum(pattern_key*bin_factor**np.arange(pattern_key.shape[1],
-                                                            dtype=np.uint64)[None, :],
-                          axis=1, dtype=np.uint64)
+        return np.sum(pattern_key*bin_factor**np.arange(pattern_key.shape[1],
+                                                        dtype=np.uint64)[None, :],
+                      axis=1, dtype=np.uint64)
+
+def _pattern_key_hash_to_index(pattern_key_hash, max_index, linear_probe):
+    """Get hash index for a given pattern key hash.
+    """
+    max_index = np.uint64(max_index)
     if linear_probe:
-        return combined % max_index
+        return pattern_key_hash % max_index
     else:
         # For legacy compability.
         with np.errstate(over='ignore'):
-            return (combined*_MAGIC_RAND) % max_index
+            return (pattern_key_hash*_MAGIC_RAND) % max_index
 
 def _compute_vectors(centroids, size, fov):
     """Get unit vectors from star centroids (pinhole camera)."""
@@ -428,6 +431,7 @@ class Tetra3():
         self._pattern_catalog = None
         self._num_patterns = None
         self._pattern_largest_edge = None
+        self._pattern_key_hashes = None
         self._verification_catalog = None
         self._cancelled = False
 
@@ -499,6 +503,12 @@ class Tetra3():
     def pattern_largest_edge(self):
         """numpy.ndarray: Catalog of largest edges for each pattern in milliradian."""
         return self._pattern_largest_edge
+
+    @property
+    def pattern_key_hashes(self):
+        """numpy.ndarray: Catalog of pattern key hashes for each pattern in the
+        database."""
+        return self._pattern_key_hashes
 
     @property
     def star_catalog_IDs(self):
@@ -583,6 +593,11 @@ class Tetra3():
             except KeyError:
                 self._logger.debug('Database does not have largest edge stored, set to None.')
                 self._pattern_largest_edge = None
+            try:
+                self._pattern_key_hashes = data['pattern_key_hashes']
+            except KeyError:
+                self._logger.debug('Database does not have pattern key hashes stored, set to None.')
+                self._pattern_key_hashes = None
             try:
                 self._star_catalog_IDs = data['star_catalog_IDs']
             except KeyError:
@@ -696,6 +711,8 @@ class Tetra3():
             'props_packed': props_packed}
         if self.pattern_largest_edge is not None:
             to_save['pattern_largest_edge'] = self.pattern_largest_edge
+        if self.pattern_key_hashes is not None:
+            to_save['pattern_key_hashes'] = self.pattern_key_hashes
         if self.star_catalog_IDs is not None:
             to_save['star_catalog_IDs'] = self.star_catalog_IDs
 
@@ -1313,7 +1330,7 @@ class Tetra3():
                           (pattern_catalog.shape, pattern_catalog.dtype))
 
         pattern_largest_edge = np.zeros(catalog_length, dtype=np.float16)
-        self._logger.info('Storing largest edges as type %s' % pattern_largest_edge.dtype)
+        pattern_key_hashes = np.zeros(catalog_length, dtype=np.uint16)
 
         # Gather collision information.
         pattern_keys_seen = set()
@@ -1335,8 +1352,9 @@ class Tetra3():
 
             # Convert edge ratio float to pattern key by binning.
             pattern_key = [int(ratio * pattern_bins) for ratio in edge_ratios]
-            hash_index = _pattern_key_to_index(
-                pattern_key, pattern_bins, catalog_length, linear_probe)
+            pattern_key_hash = _compute_pattern_key_hash(pattern_key, pattern_bins)
+            hash_index = _pattern_key_hash_to_index(
+                pattern_key_hash, catalog_length, linear_probe)
 
             if EVALUATE_COLLISIONS:
                 prev_len = len(pattern_keys_seen)
@@ -1359,7 +1377,8 @@ class Tetra3():
             pattern = [pattern[i] for (_, i) in centroid_distances]
 
             index = _insert_at_index(pattern, hash_index, pattern_catalog, linear_probe)
-            # Store as milliradian to better use float16 range
+            pattern_key_hashes[index] = np.uint16(int(pattern_key_hash) & 0xffff)
+            # Store as milliradian to better use float16 range.
             pattern_largest_edge[index] = largest_angle*1000
 
         total_probes = 0
@@ -1367,8 +1386,10 @@ class Tetra3():
         if EVALUATE_COLLISIONS:
             # Evaluate average hash table probe count.
             for pattern_key in pattern_keys_seen:
-                hash_index = _pattern_key_to_index(
-                    pattern_key, pattern_bins, catalog_length, linear_probe)
+                pattern_key_hash = _compute_pattern_key_hash(
+                    pattern_key, pattern_bins)
+                hash_index = _pattern_key_hash_to_index(
+                    pattern_key_hash, catalog_length, linear_probe)
                 hash_match_inds = _get_table_indices_from_hash(
                     hash_index, pattern_catalog, linear_probe)
                 probes = len(hash_match_inds)
@@ -1389,6 +1410,7 @@ class Tetra3():
         self._star_catalog_IDs = star_catID
         self._pattern_catalog = pattern_catalog
         self._pattern_largest_edge = pattern_largest_edge
+        self._pattern_key_hashes = pattern_key_hashes
         self._db_props['pattern_mode'] = 'edge_ratio'
         self._db_props['hash_table_type'] = 'linear_probe' if linear_probe else 'quadratic_probe'
         self._db_props['pattern_size'] = PATTERN_SIZE
@@ -1420,7 +1442,7 @@ class Tetra3():
             self._logger.info('Skipping database file generation.')
 
     def solve_from_image(self, image, fov_estimate=None, fov_max_error=None,
-                         match_radius=.01, match_threshold=1e-4,
+                         match_radius=.01, match_threshold=1e-5,
                          solve_timeout=5000, target_pixel=None, target_sky_coord=None, distortion=0,
                          return_matches=False, return_visual=False, match_max_error=.002,
                          pattern_checking_stars=None, **kwargs):
@@ -1448,7 +1470,7 @@ class Tetra3():
             match_radius (float, optional): Maximum distance to a star to be considered a match
                 as a fraction of the image field of view.
             match_threshold (float, optional): Maximum allowed false-positive probability to accept
-                a tested pattern a valid match. Default 1e-4. NEW: Corrected for the database size.
+                a tested pattern a valid match. Default 1e-5.
             solve_timeout (float, optional): Timeout in milliseconds after which the solver will
                 give up on matching patterns. Defaults to 5000 (5 seconds).
             target_pixel (numpy.ndarray, optional): Pixel coordinates to return RA/Dec for in
@@ -1558,7 +1580,7 @@ class Tetra3():
             return solution
 
     def solve_from_centroids(self, star_centroids, size, fov_estimate=None, fov_max_error=None,
-                             match_radius=.01, match_threshold=1e-4,
+                             match_radius=.01, match_threshold=1e-5,
                              solve_timeout=5000, target_pixel=None, target_sky_coord=None, distortion=0,
                              return_matches=False, return_catalog=False,
                              return_visual=False, return_rotation_matrix=False,
@@ -1598,7 +1620,7 @@ class Tetra3():
             match_radius (float, optional): Maximum distance to a star to be considered a match
                 as a fraction of the image field of view. Default 0.01.
             match_threshold (float, optional): Maximum allowed false-positive probability to accept
-                a tested pattern a valid match. Default 1e-4. NEW: Corrected for the database size.
+                a tested pattern a valid match. Default 1e-5.
             solve_timeout (float, optional): Timeout in milliseconds after which the solver will
                 give up on matching patterns. Defaults to 5000 (5 seconds).
             target_pixel (numpy.ndarray, optional): Pixel coordinates to return RA/Dec for in
@@ -1840,13 +1862,15 @@ class Tetra3():
             for (_, pattern_key) in pattern_key_list:
                 search_space_explored += 1
                 # Calculate corresponding hash index.
-                hash_index = _pattern_key_to_index(
-                    pattern_key, p_bins, self.pattern_catalog.shape[0], linear_probe)
+                pattern_key_hash = _compute_pattern_key_hash(pattern_key, p_bins)
+                hash_index = _pattern_key_hash_to_index(
+                    pattern_key_hash, self.pattern_catalog.shape[0], linear_probe)
 
                 (catalog_pattern_edges, all_catalog_pattern_vectors) = \
                     self._get_all_patterns_for_index(
-                        hash_index, upper_tri_index, image_pattern_largest_edge,
-                        fov_estimate, fov_max_error, linear_probe)
+                        pattern_key_hash, hash_index, upper_tri_index,
+                        image_pattern_largest_edge, fov_estimate,
+                        fov_max_error, linear_probe)
                 if catalog_pattern_edges is None:
                     continue
                 catalog_lookup_count += len(catalog_pattern_edges)
@@ -2212,7 +2236,7 @@ class Tetra3():
         self._logger.debug('cancelling')
         self._cancelled = True
 
-    def _get_all_patterns_for_index(self, hash_index, upper_tri_index,
+    def _get_all_patterns_for_index(self, pattern_key_hash, hash_index, upper_tri_index,
                                     image_pattern_largest_edge, fov_estimate, fov_max_error,
                                     linear_probe):
         """Returns (edges, vectors) for all pattern table entries for `hash_index`."""
@@ -2222,6 +2246,13 @@ class Tetra3():
             hash_index, self.pattern_catalog, linear_probe)
         if len(hash_match_inds) == 0:
             return (None, None)
+
+        if self.pattern_key_hashes is not None:
+            key_hash16 = np.uint16(int(pattern_key_hash) & 0xffff)
+            keep = self.pattern_key_hashes[hash_match_inds] == key_hash16
+            hash_match_inds = hash_match_inds[keep]
+            if len(hash_match_inds) == 0:
+                return (None, None)
 
         if self.pattern_largest_edge is not None \
            and fov_estimate is not None \

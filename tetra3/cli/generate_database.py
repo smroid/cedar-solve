@@ -69,6 +69,9 @@ def main():
                              "If 'now' (default), the current year is used. If 'none', star motions "
                              "are not propagated and this allows catalogue entries without proper "
                              "motions to be used in the database.")
+    parser.add_argument("--linear-probe", type=bool, default=False,
+                        help="Determines whether the pattern hash table uses quadratic probing "
+                             "(False) or linear probing (True).")
 
     args = parser.parse_args()
 
@@ -85,6 +88,7 @@ def main():
         pattern_max_error=args.pattern_max_error,
         multiscale_step=args.multiscale_step,
         epoch_proper_motion=args.epoch_proper_motion,
+        linear_probe=args.linear_probe,
     )
 
 if __name__ == "__main__":
