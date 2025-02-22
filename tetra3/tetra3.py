@@ -199,24 +199,24 @@ def _get_table_indices_from_hash(hash_index, table, linear_probe):
         else:
             found.append(i)
 
-def _pattern_hash_to_index(pattern_hash, bin_factor, max_index, linear_probe):
-    """Get hash index for a given pattern_hash (tuple of ordered binned edge ratios).
+def _pattern_key_to_index(pattern_key, bin_factor, max_index, linear_probe):
+    """Get hash index for a given pattern_key (tuple of ordered binned edge ratios).
     Can be length p list or n by p array."""
-    pattern_hash = np.uint64(pattern_hash)
+    pattern_key = np.uint64(pattern_key)
     bin_factor = np.uint64(bin_factor)
     max_index = np.uint64(max_index)
-    # Combine pattern_hash components to a single large number.
+    # Combine pattern_key components to a single large number.
 
-    # If p is the length of the pattern_hash (default 5) and B is the number of bins
-    # (default 50, calculated from max error), this will first give each pattern_hash
+    # If p is the length of the pattern_key (default 5) and B is the number of bins
+    # (default 50, calculated from max error), this will first give each pattern_key
     # a unique index from 0 to B^p-1.
-    if pattern_hash.ndim == 1:
-        combined = np.sum(pattern_hash*bin_factor**np.arange(len(pattern_hash),
-                                                             dtype=np.uint64),
+    if pattern_key.ndim == 1:
+        combined = np.sum(pattern_key*bin_factor**np.arange(len(pattern_key),
+                                                            dtype=np.uint64),
                           dtype=np.uint64)
     else:
-        combined = np.sum(pattern_hash*bin_factor**np.arange(pattern_hash.shape[1],
-                                                             dtype=np.uint64)[None, :],
+        combined = np.sum(pattern_key*bin_factor**np.arange(pattern_key.shape[1],
+                                                            dtype=np.uint64)[None, :],
                           axis=1, dtype=np.uint64)
     if linear_probe:
         return combined % max_index
@@ -347,27 +347,30 @@ def _distance_from_angle(angle):
 class Tetra3():
     """Solve star patterns and manage databases.
 
-    To find the direction in the sky an image is showing, this class calculates the geometric hashes
-    of star patterns seen in the image and looks for matching hashes in a pattern database loaded
-    into memory. Subsequently, all stars that should be visible in the image (based on the database
-    pattern's location) are looked for and the match is confirmed or rejected based on the
-    probability that the found number of matches happens by chance.
+    To find the direction in the sky an image is showing, this class calculates the
+    geometric keys of star patterns seen in the image and looks for matching keys in a
+    pattern database loaded into memory. Subsequently, all stars that should be visible in
+    the image (based on the database pattern's location) are looked for and the match is
+    confirmed or rejected based on the probability that the found number of matches
+    happens by chance.
 
-    Each pattern is made up of four stars, and the pattern hash is created by calculating the
-    distances between every pair of stars in the pattern and normalising by the longest to create a
-    set of five numbers between zero and one. This information, and the desired tolerance, is used
-    to find the indices in the database where the match may reside by a table index hashing
-    function. See the description of :meth:`generate_database` for more detail.
+    Each pattern is made up of four stars, and the pattern key is created by calculating
+    the distances between every pair of stars in the pattern and normalising by the
+    longest to create a set of five numbers between zero and one. This information, and
+    the desired tolerance, is used to find the indices in the database where the match may
+    reside by a table index hashing function. See the description of
+    :meth:`generate_database` for more detail.
 
-    A database needs to be generated with patterns which are of appropriate scale for the horizontal
-    field of view (FOV) of your camera. Therefore, generate a database using
-    :meth:`generate_database` with a `max_fov` which is the FOV of your camera (or slightly larger).
-    A database with `max_fov=30` (degrees) is included as `default_database.npz`.
+    A database needs to be generated with patterns which are of appropriate scale for the
+    horizontal field of view (FOV) of your camera. Therefore, generate a database using
+    :meth:`generate_database` with a `max_fov` which is the FOV of your camera (or
+    slightly larger). A database with `max_fov=30` (degrees) is included as
+    `default_database.npz`.
 
-    Star locations (centroids) are found using :meth:`tetra3.get_centroids_from_image`, use one of
-    your images to find settings which work well for your images. Then pass those settings as
-    keyword arguments to :meth:`solve_from_image`. Alternately, you can use Cedar Detect for
-    detecting and centroiding stars in your images.
+    Star locations (centroids) are found using :meth:`tetra3.get_centroids_from_image`,
+    use one of your images to find settings which work well for your images. Then pass
+    those settings as keyword arguments to :meth:`solve_from_image`. Alternately, you can
+    use Cedar Detect for detecting and centroiding stars in your images.
 
     Example 1: Load database and solve image
         ::
@@ -923,68 +926,74 @@ class Tetra3():
         If you know your FOV, set max_fov to this value and leave min_fov as None. The example above
         takes less than 7 minutes to build on RPi4.
 
-        Note on celestial coordinates: The RA/Dec values incorporated into the database are expressed in the
-        same celestial coordinate system as the input catalog. For hip_main and tyc_main this is J2000; for
-        bsc5 this is also J2000 (but could be B1950 for older Bright Star Catalogs). The solve_from_image()
-        function returns its solution's RA/Dec values along with the equinox epoch of the database's catalog.
+        Note on celestial coordinates: The RA/Dec values incorporated into the database
+        are expressed in the same celestial coordinate system as the input catalog. For
+        hip_main and tyc_main this is J2000; for bsc5 this is also J2000 (but could be
+        B1950 for older Bright Star Catalogs). The solve_from_image() function returns its
+        solution's RA/Dec values along with the equinox epoch of the database's catalog.
 
-        Notes on proper motion: star catalogs include stellar proper motion data. This means they give each
-        star's position as of a specified year (1991.25 for hip_main and tyc_main; 2000(?) for bsc5). In
-        addition, for each star, the annual rate of motion in RA/Dec is also given. This allows
-        generate_database() to output a database with stellar positions propagated to the year in which the
-        database was generated (by default; see below). Some stars don't have proper motions in the catalogue
-        and will therefore be excluded from the database, however, you can set epoch_proper_motion=None to
-        disable this propagation and all stars will be included. The field 'epoch_proper_motion' of the
-        database properties identifies the epoch for which the star positions are valid.
+        Notes on proper motion: star catalogs include stellar proper motion data. This
+        means they give each star's position as of a specified year (1991.25 for hip_main
+        and tyc_main; 2000(?) for bsc5). In addition, for each star, the annual rate of
+        motion in RA/Dec is also given. This allows generate_database() to output a
+        database with stellar positions propagated to the year in which the database was
+        generated (by default; see below). Some stars don't have proper motions in the
+        catalogue and will therefore be excluded from the database, however, you can set
+        epoch_proper_motion=None to disable this propagation and all stars will be
+        included. The field 'epoch_proper_motion' of the database properties identifies
+        the epoch for which the star positions are valid.
 
-        Theoretically, when passing an image to solve_from_image(), the database's epoch_proper_motion should
-        be the same as the time at which the image was taken. In practice, this is generally unimportant
-        because most stars' proper motion is very small. One exception: for very small fields of view (high
-        magnification), even small proper motions can be significant. Another exception: when solving
-        historical images. In both cases, you should arrange to use a database built with a
-        epoch_proper_motion similar to the image's vintage.
+        Theoretically, when passing an image to solve_from_image(), the database's
+        epoch_proper_motion should be the same as the time at which the image was taken.
+        In practice, this is generally unimportant because most stars' proper motion is
+        very small. One exception: for very small fields of view (high magnification),
+        even small proper motions can be significant. Another exception: when solving
+        historical images. In both cases, you should arrange to use a database built with
+        a epoch_proper_motion similar to the image's vintage.
 
-        About patterns, pattern hashes, and collisions:
+        About patterns, pattern keys, and collisions:
 
-        Tetra3 refers to a grouping of four stars as a "pattern", and assigns each pattern a
-        pattern hash as follows:
+        Tetra3 refers to a grouping of four stars as a "pattern", and assigns each pattern
+        a pattern key as follows:
 
         1. Calculate the six edge distances between each pair of stars in the pattern.
         2. Normalise by the longest edge to create a set of five numbers each between zero and
            one.
         3. Order the five edge ratios.
         4. Quantize each edge ratio into a designated number of bins.
-        5. Concatenate the five ordered and quantized edge ratios to form the hash value for the
+        5. Concatenate the five ordered and quantized edge ratios to form the key for the
            pattern.
 
-        When solving an image, tetra3 forms patterns from 4-groups of stars in the image, computes
-        each pattern's hash in the same manner, and use these pattern hashes to look up the
-        corresponding database pattern (or patterns, see next). The location of stars in the
-        database pattern and other nearby catalog stars are used to validate the match in the image.
+        When solving an image, tetra3 forms patterns from 4-groups of stars in the image,
+        computes each pattern's key in the same manner, and use these pattern keys to look
+        up the corresponding database pattern (or patterns, see next). The location of
+        stars in the database pattern and other nearby catalog stars are used to validate
+        the match in the image.
 
-        Note that it is possible for multiple distinct patterns to share the same hash; this happens
-        more frequently as the number of quantization bins in step 4 is reduced. When multiple
-        patterns share the same hash we call this a "pattern hash collision". When solving an image,
-        pattern hash collisions increase the number of database patterns to be validated as a match
-        against the image's star patterns.
+        Note that it is possible for multiple distinct patterns to share the same key;
+        this happens more frequently as the number of quantization bins in step 4 is
+        reduced. When multiple patterns share the same key we call this a "pattern key
+        collision". When solving an image, pattern key collisions increase the number of
+        database patterns to be validated as a match against the image's star patterns.
 
-        In theory, a python dict could be used to map from pattern hash value to the list of
-        patterns with that hash value. Howver, catalog databases can easily contain millions of
-        patterns, so in practice such a pattern dict would occupy an uncomfortably large amount of
-        memory.
+        In theory, a python dict could be used to map from pattern key value to the list
+        of patterns with that key value. Howver, catalog databases can easily contain
+        millions of patterns, so in practice such a pattern dict would occupy an
+        uncomfortably large amount of memory.
 
-        Tetra3 instead uses an efficient array representation of its patterns, with each pattern
-        hash value being hashed (*) to form an index into the pattern array. Mapping the large space
-        of possible pattern hash values to the modest range of pattern array indices induces further
-        collisions, as does the open addressing hash algorithm used to manage the pattern array.
-        Because the pattern array is allocated to thrice the number of patterns, the additional
-        hashing and table collisions induced are modest.
+        Tetra3 instead uses an efficient array representation of its patterns, with each
+        pattern key value being hashed (*) to form an index into the pattern array.
+        Mapping the large space of possible pattern key values to the modest range of
+        pattern array indices induces further collisions. Because the pattern array is
+        allocated to larger than the number of patterns, the additional hash table
+        collisions induced are modest.
 
-        * We have two hashing concepts in play. The first is "geometric hashing" from the field of
-        object recognition and pattern matching (https://en.wikipedia.org/wiki/Geometric_hashing),
-        where a 4-star pattern is distilled to our pattern hash, a 5-tuple of quantized edge ratios.
-        The second is a "hash table" (https://en.wikipedia.org/wiki/Hash_table) where the pattern
-        hash is hashed to index into a compact table of all of the star patterns.
+        * We have two hashing concepts in play. The first is "geometric hashing" from the
+        field of object recognition and pattern matching
+        (https://en.wikipedia.org/wiki/Geometric_hashing), where a 4-star pattern is
+        distilled to our pattern key, a 5-tuple of quantized edge ratios. The second is a
+        "hash table" (https://en.wikipedia.org/wiki/Hash_table) where the pattern key is
+        hashed to index into a compact table of all of the star patterns.
 
         Args:
             max_fov (float): Maximum angle (in degrees) between stars in the same pattern.
@@ -1008,10 +1017,10 @@ class Tetra3():
                 from star catalog. None (default) causes the limiting magnitude to be computed
                 based on `min_fov` and `verification_stars_per_fov`.
             pattern_max_error (float, optional): This value determines the number of bins into which
-                a pattern hash's edge ratios are each quantized:
+                a pattern key's edge ratios are each quantized:
                   pattern_bins = 0.25 / pattern_max_error
                 Default .001, corresponding to pattern_bins=250. For a database with limiting
-                magnitude 7, this yields a reasonable pattern hash collision rate.
+                magnitude 7, this yields a reasonable pattern key collision rate.
             multiscale_step (float, optional): Determines the largest ratio between subsequent FOVs
                 that is allowed when generating a multiscale database. Defaults to 1.5. If the ratio
                 max_fov/min_fov is less than sqrt(multiscale_step) a single scale database is built.
@@ -1025,6 +1034,7 @@ class Tetra3():
                 hash table. This is appropriate for deployments where you expect the pattern
                 database to fit entirely in RAM. Use linear_probe=True when you expect the
                 pattern database to be too large to fit in RAM.
+
         """
         self._logger.debug('Got generate pattern catalogue with input: '
                            + str((max_fov, min_fov, save_as, star_catalog,
@@ -1038,7 +1048,7 @@ class Tetra3():
                 (pattern_stars_per_fov, lattice_field_oversampling))
             lattice_field_oversampling = pattern_stars_per_fov
 
-        # If True, measures and logs collisions (pattern hash, hash index and pattern table).
+        # If True, measures and logs collisions (pattern key, hash table).
         EVALUATE_COLLISIONS = False
 
         star_catalog, catalog_file_full_pathname = self._build_catalog_path(star_catalog)
@@ -1284,8 +1294,8 @@ class Tetra3():
         # Don't need this anymore.
         del pattern_kd_tree
 
-        # Create all pattern hashes by calculating, sorting, and binning edge ratios; then compute
-        # a table index hash from the pattern hash, and store the table index -> pattern mapping.
+        # Create all pattern keys by calculating, sorting, and binning edge ratios; then compute
+        # a table index hash from the pattern key, and store the table index -> pattern mapping.
         self._logger.info('Start building catalogue.')
         if linear_probe:
             catalog_length = int(_next_prime(3 * len(pattern_list)))
@@ -1306,8 +1316,8 @@ class Tetra3():
         self._logger.info('Storing largest edges as type %s' % pattern_largest_edge.dtype)
 
         # Gather collision information.
-        pattern_hashes_seen = set()
-        pattern_hash_collisions = 0
+        pattern_keys_seen = set()
+        pattern_key_collisions = 0
 
         # Go through each pattern and insert to the catalogue
         for (pat_index, pattern) in enumerate(pattern_list):
@@ -1323,16 +1333,16 @@ class Tetra3():
             largest_angle = edge_angles_sorted[-1]
             edge_ratios = [angle / largest_angle for angle in edge_angles_sorted[:-1]]
 
-            # convert edge ratio float to pattern hash by binning
-            pattern_hash = [int(ratio * pattern_bins) for ratio in edge_ratios]
-            hash_index = _pattern_hash_to_index(
-                pattern_hash, pattern_bins, catalog_length, linear_probe)
+            # Convert edge ratio float to pattern key by binning.
+            pattern_key = [int(ratio * pattern_bins) for ratio in edge_ratios]
+            hash_index = _pattern_key_to_index(
+                pattern_key, pattern_bins, catalog_length, linear_probe)
 
             if EVALUATE_COLLISIONS:
-                prev_len = len(pattern_hashes_seen)
-                pattern_hashes_seen.add(tuple(pattern_hash))
-                if prev_len == len(pattern_hashes_seen):
-                    pattern_hash_collisions += 1
+                prev_len = len(pattern_keys_seen)
+                pattern_keys_seen.add(tuple(pattern_key))
+                if prev_len == len(pattern_keys_seen):
+                    pattern_key_collisions += 1
 
             # Presort patterns.
             # Find the centroid, or average position, of the star pattern.
@@ -1356,9 +1366,9 @@ class Tetra3():
         max_probes = 0
         if EVALUATE_COLLISIONS:
             # Evaluate average hash table probe count.
-            for pattern_hash in pattern_hashes_seen:
-                hash_index = _pattern_hash_to_index(
-                    pattern_hash, pattern_bins, catalog_length, linear_probe)
+            for pattern_key in pattern_keys_seen:
+                hash_index = _pattern_key_to_index(
+                    pattern_key, pattern_bins, catalog_length, linear_probe)
                 hash_match_inds = _get_table_indices_from_hash(
                     hash_index, pattern_catalog, linear_probe)
                 probes = len(hash_match_inds)
@@ -1370,9 +1380,9 @@ class Tetra3():
         self._logger.info('Size of uncompressed star table: %i Bytes.' %star_table.nbytes)
         self._logger.info('Size of uncompressed pattern catalog: %i Bytes.' %pattern_catalog.nbytes)
         if EVALUATE_COLLISIONS:
-            self._logger.info('Pattern hash collisions: %s; average/max table probe len: %.2f/%d'
-                              % (pattern_hash_collisions,
-                                 total_probes / len(pattern_hashes_seen),
+            self._logger.info('Pattern key collisions: %s; average/max hash table probe len: %.2f/%d'
+                              % (pattern_key_collisions,
+                                 total_probes / len(pattern_keys_seen),
                                  max_probes))
         self._star_table = star_table
         self._star_kd_tree = vector_kd_tree
@@ -1806,32 +1816,32 @@ class Tetra3():
             image_pattern = edge_angles_sorted[:-1] / image_pattern_largest_edge
             image_pattern_edge_ratio_min = image_pattern - p_max_err
             image_pattern_edge_ratio_max = image_pattern + p_max_err
-            image_pattern_hash = (image_pattern*p_bins).astype(int)
+            image_pattern_key = (image_pattern*p_bins).astype(int)
 
             image_patterns_evaluated += 1
 
-            # Possible range of pattern hashes we need to look up
-            pattern_hash_space_min = np.maximum(0, image_pattern_edge_ratio_min*p_bins).astype(int)
-            pattern_hash_space_max = np.minimum(p_bins, image_pattern_edge_ratio_max*p_bins).astype(int)
+            # Possible range of pattern keys we need to look up
+            pattern_key_space_min = np.maximum(0, image_pattern_edge_ratio_min*p_bins).astype(int)
+            pattern_key_space_max = np.minimum(p_bins, image_pattern_edge_ratio_max*p_bins).astype(int)
             # Make a list of the low/high values in each binned edge ratio position.
-            pattern_hash_range = list(range(low, high + 1) for (low, high) in zip(pattern_hash_space_min,
-                                                                                  pattern_hash_space_max))
-            def dist(pattern_hash):
-                return sum((a-b)*(a-b) for (a, b) in zip(pattern_hash, image_pattern_hash))
+            pattern_key_range = list(range(low, high + 1) for (low, high) in zip(pattern_key_space_min,
+                                                                                 pattern_key_space_max))
+            def dist(pattern_key):
+                return sum((a-b)*(a-b) for (a, b) in zip(pattern_key, image_pattern_key))
 
-            # Make a list of all pattern hash values to explore; tag each with its distance from
-            # 'image_pattern_hash' for sorting, so the first pattern hash values we try are the
+            # Make a list of all pattern keys to explore; tag each with its distance from
+            # 'image_pattern_key' for sorting, so the first pattern key values we try are the
             # ones closest to what we measured in the image to be solved.
-            pattern_hash_list = list((dist(code), code) for code in itertools.product(*pattern_hash_range))
-            pattern_hash_list.sort()
+            pattern_key_list = list((dist(code), code) for code in itertools.product(*pattern_key_range))
+            pattern_key_list.sort()
 
-            # Iterate over pattern hash values, starting from 'image_pattern_hash' and working
+            # Iterate over pattern keys, starting from 'image_pattern_key' and working
             # our way outward.
-            for (_, pattern_hash) in pattern_hash_list:
+            for (_, pattern_key) in pattern_key_list:
                 search_space_explored += 1
                 # Calculate corresponding hash index.
-                hash_index = _pattern_hash_to_index(
-                    pattern_hash, p_bins, self.pattern_catalog.shape[0], linear_probe)
+                hash_index = _pattern_key_to_index(
+                    pattern_key, p_bins, self.pattern_catalog.shape[0], linear_probe)
 
                 (catalog_pattern_edges, all_catalog_pattern_vectors) = \
                     self._get_all_patterns_for_index(
@@ -2167,7 +2177,7 @@ class Tetra3():
 
                     self._logger.debug(solution_dict)
                     self._logger.debug(
-                        'For %d centroids, evaluated %s image patterns; searched %s pattern hashes' %
+                        'For %d centroids, evaluated %s image patterns; searched %s pattern keys' %
                         (num_centroids,
                          image_patterns_evaluated,
                          search_space_explored))
@@ -2182,7 +2192,7 @@ class Tetra3():
         self._logger.debug('FAIL: Did not find a match to the stars! It took '
                            + str(round(t_solve)) + ' ms.')
         self._logger.debug(
-            'FAIL: For %d centroids, evaluated %s image patterns; searched %s pattern hashes' %
+            'FAIL: For %d centroids, evaluated %s image patterns; searched %s pattern keys' %
             (num_centroids,
              image_patterns_evaluated,
              search_space_explored))
