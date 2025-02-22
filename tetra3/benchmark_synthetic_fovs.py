@@ -123,14 +123,19 @@ def benchmark_synthetic_fovs(width, height, fov_deg, num_fovs,
             continue
 
         num_successes += 1
+
+        tol = 0.05
+        # We don't handle proper motion very close to the poles, so use a larger tolerance.
+        if abs(np.rad2deg(dec)) > (90 - fov_deg/2):
+            tol = 0.5
         ra_diff = np.rad2deg(ra) - solution['RA']
         if ra_diff > 180:
             ra_diff -= 360
         if ra_diff < -180:
             ra_diff += 360
-        if abs(ra_diff) > 0.3:
+        if abs(ra_diff) > tol:
             pytest.fail(f"'expected RA {np.rad2deg(ra)}, got {solution['RA']} (dec {solution['Dec']})'")
-        if abs(np.rad2deg(dec) - solution['Dec']) > 0.3:
+        if abs(np.rad2deg(dec) - solution['Dec']) > tol:
             pytest.fail(f"expected Dec {np.rad2deg(dec)}, got {solution['Dec']}")
 
         total_solve_time_ms += solution['T_solve']
