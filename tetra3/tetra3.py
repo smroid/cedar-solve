@@ -2036,8 +2036,6 @@ class Tetra3():
                     nearby_cat_star_vectors_derot = np.dot(rotation_matrix, nearby_cat_star_vectors.T).T
                     (nearby_cat_star_centroids, kept) = _compute_centroids(
                         nearby_cat_star_vectors_derot, (height, width), fov)
-                    nearby_cat_star_centroids = nearby_cat_star_centroids[kept, :]
-                    nearby_cat_star_inds = nearby_cat_star_inds[kept]
 
                     # Get vectors
                     final_match_vectors = _compute_vectors(
