@@ -52,7 +52,8 @@ try:
                 t0 = precision_timestamp()
                 if USE_CEDAR_DETECT:
                     centroids = cedar_detect.extract_centroids(
-                        np_image, sigma=8, max_size=10, use_binned=True)
+                        np_image, sigma=8, max_size=10, use_binned=True,
+                        detect_hot_pixels=True)
                 else:
                     centroids = tetra3.get_centroids_from_image(np_image)
                 t_extract = (precision_timestamp() - t0)*1000
@@ -62,12 +63,17 @@ try:
                       (basename, len(centroids), t_extract))
 
                 # Draw a small blue circle around each centroid.
+                # Stars early in list (bright) get brighter circle.
                 (width, height) = img.size[:2]
                 out_img = Image.new('RGB', (width, height))
                 out_img.paste(img)
                 img_draw = ImageDraw.Draw(out_img)
+                index = 0
                 for cent in centroids:
-                    draw_circle(img_draw, cent, 4, outline=(64, 64, 255))
+                    progress = index / len(centroids)
+                    circle_brightness = 100 + ((1.0 - progress) * 155.0)
+                    draw_circle(img_draw, cent, 4, outline=(20, 20, int(circle_brightness)))
+                    index += 1
 
                 # Here you can add e.g. `fov_estimate`/`fov_max_error` to improve speed or a
                 # `distortion` range to search (default assumes undistorted image). There
@@ -81,7 +87,7 @@ try:
                     trimmed_centroids = centroids[:30]
                     solution = t3.solve_from_centroids(
                         trimmed_centroids, (height, width),
-                        return_matches=False, return_catalog=False,
+                        return_matches=True, return_catalog=False,
                         solve_timeout=5000, distortion=0)
 
                     if 'matched_centroids' in solution:
