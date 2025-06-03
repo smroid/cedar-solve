@@ -7,7 +7,7 @@ from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Map
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class CentroidsRequest(_message.Message):
-    __slots__ = ("input_image", "sigma", "max_size", "binning", "return_binned", "use_binned_for_star_candidates", "detect_hot_pixels", "estimate_background_region")
+    __slots__ = ("input_image", "sigma", "max_size", "binning", "return_binned", "use_binned_for_star_candidates", "detect_hot_pixels", "normalize_rows", "estimate_background_region")
     INPUT_IMAGE_FIELD_NUMBER: _ClassVar[int]
     SIGMA_FIELD_NUMBER: _ClassVar[int]
     MAX_SIZE_FIELD_NUMBER: _ClassVar[int]
@@ -15,6 +15,7 @@ class CentroidsRequest(_message.Message):
     RETURN_BINNED_FIELD_NUMBER: _ClassVar[int]
     USE_BINNED_FOR_STAR_CANDIDATES_FIELD_NUMBER: _ClassVar[int]
     DETECT_HOT_PIXELS_FIELD_NUMBER: _ClassVar[int]
+    NORMALIZE_ROWS_FIELD_NUMBER: _ClassVar[int]
     ESTIMATE_BACKGROUND_REGION_FIELD_NUMBER: _ClassVar[int]
     input_image: Image
     sigma: float
@@ -23,8 +24,9 @@ class CentroidsRequest(_message.Message):
     return_binned: bool
     use_binned_for_star_candidates: bool
     detect_hot_pixels: bool
+    normalize_rows: bool
     estimate_background_region: Rectangle
-    def __init__(self, input_image: _Optional[_Union[Image, _Mapping]] = ..., sigma: _Optional[float] = ..., max_size: _Optional[int] = ..., binning: _Optional[int] = ..., return_binned: bool = ..., use_binned_for_star_candidates: bool = ..., detect_hot_pixels: bool = ..., estimate_background_region: _Optional[_Union[Rectangle, _Mapping]] = ...) -> None: ...
+    def __init__(self, input_image: _Optional[_Union[Image, _Mapping]] = ..., sigma: _Optional[float] = ..., max_size: _Optional[int] = ..., binning: _Optional[int] = ..., return_binned: bool = ..., use_binned_for_star_candidates: bool = ..., detect_hot_pixels: bool = ..., normalize_rows: bool = ..., estimate_background_region: _Optional[_Union[Rectangle, _Mapping]] = ...) -> None: ...
 
 class Rectangle(_message.Message):
     __slots__ = ("origin_x", "origin_y", "width", "height")

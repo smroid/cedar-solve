@@ -87,8 +87,8 @@ class CedarDetectClient:
             self._shmem.unlink()
             self._shmem = None
 
-    def extract_centroids(self, image, sigma, max_size, use_binned, binning=None,
-                          detect_hot_pixels=True):
+    def extract_centroids(self, image, sigma, use_binned, binning=None,
+                          detect_hot_pixels=True, normalize_rows=True):
         """Invokes the CedarDetect.ExtractCentroids() RPC. Returns [(y,x)] of the
         detected star centroids.
         """
@@ -134,9 +134,9 @@ class CedarDetectClient:
                 im = cedar_detect_pb2.Image(width=width, height=height,
                                             shmem_name=self._shmem.name, reopen_shmem=resized)
                 req = cedar_detect_pb2.CentroidsRequest(
-                    input_image=im, sigma=sigma, max_size=max_size, return_binned=False,
+                    input_image=im, sigma=sigma, return_binned=False,
                     binning=binning, use_binned_for_star_candidates=use_binned,
-                    detect_hot_pixels=detect_hot_pixels)
+                    detect_hot_pixels=detect_hot_pixels, normalize_rows=normalize_rows)
                 try:
                     centroids_result = self._get_stub().ExtractCentroids(req,
                                                                          wait_for_ready=True,
@@ -160,8 +160,9 @@ class CedarDetectClient:
                 im = cedar_detect_pb2.Image(width=width, height=height,
                                             image_data=np_image.tobytes())
                 req = cedar_detect_pb2.CentroidsRequest(
-                    input_image=im, sigma=sigma, max_size=max_size, return_binned=False,
-                    use_binned_for_star_candidates=use_binned)
+                    input_image=im, sigma=sigma, return_binned=False,
+                    binning=binning, use_binned_for_star_candidates=use_binned,
+                    detect_hot_pixels=detect_hot_pixels, normalize_rows=normalize_rows)
                 try:
                     centroids_result = self._get_stub().ExtractCentroids(req)
                     break  # Succeeded, break out of retry loop.

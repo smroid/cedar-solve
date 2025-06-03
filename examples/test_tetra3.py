@@ -52,8 +52,8 @@ try:
                 t0 = precision_timestamp()
                 if USE_CEDAR_DETECT:
                     centroids = cedar_detect.extract_centroids(
-                        np_image, sigma=8, max_size=10, use_binned=True,
-                        detect_hot_pixels=True)
+                        np_image, sigma=8, use_binned=True,
+                        detect_hot_pixels=True, normalize_rows=True)
                 else:
                     centroids = tetra3.get_centroids_from_image(np_image)
                 t_extract = (precision_timestamp() - t0)*1000
