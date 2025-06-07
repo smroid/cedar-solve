@@ -41,9 +41,11 @@ t3 = tetra3.Tetra3(load_database='default_database')
 
 # Path where images are
 path = EXAMPLES_DIR / 'data' / 'medium_fov'
+# path = EXAMPLES_DIR / 'data' / 'ov5647'
 # path = EXAMPLES_DIR / 'data' / 'large_fov'
 try:
     for impath in path.glob('*'):
+    # for impath in path.glob('img_3000ms_20250607_092717_crop2.bmp'):
         try:
             with Image.open(str(impath)) as img:
                 img = img.convert(mode='L')
