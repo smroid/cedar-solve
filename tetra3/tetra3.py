@@ -537,10 +537,11 @@ class Tetra3():
             - 'pattern_size': Number of stars in each pattern.
             - 'pattern_bins': Number of bins per dimension in pattern catalog.
             - 'pattern_max_error': Maximum difference allowed in pattern for a match.
-            - 'max_fov': Maximum camera horizontal field of view (in degrees) the database is built for.
-              This will also be the angular extent of the largest pattern.
-            - 'min_fov': Minimum camera horizontal field of view (in degrees) the database is built for.
-              This drives the density of stars in the database, patterns may be smaller than this.
+            - 'max_fov': Maximum camera horizontal field of view (in degrees) the database is
+              built for. This will also be the angular extent of the largest pattern.
+            - 'min_fov': Minimum camera horizontal field of view (in degrees) the database is
+              built for. This drives the density of stars in the database, patterns may be
+              smaller than this.
             - 'lattice_field_oversampling': When uniformly distributing pattern generation fields over
               the celestial sphere, this determines the overlap factor.
               Also stored as 'pattern_stars_per_fov' for compatibility with earlier versions.
@@ -553,7 +554,8 @@ class Tetra3():
             - 'epoch_equinox': Epoch of the 'star_catalog' celestial coordinate system. Usually 2000,
               but could be 1950 for old Bright Star Catalog versions.
             - 'epoch_proper_motion': year to which stellar proper motions have been propagated.
-            - 'presort_patterns': Indicates if the pattern indices are sorted by distance to the centroid.
+            - 'presort_patterns': Indicates if the pattern indices are sorted by distance to the
+              centroid.
             - 'range_ra': Always None, no longer used. The whole sky is included in the database.
             - 'range_dec': Always None, no longer used. The whole sky is included in the database.
             - 'num_patterns': The number of patterns in the database. If None, this is one
@@ -1581,8 +1583,8 @@ class Tetra3():
 
     def solve_from_centroids(self, star_centroids, size, fov_estimate=None, fov_max_error=None,
                              match_radius=.01, match_threshold=1e-5,
-                             solve_timeout=5000, target_pixel=None, target_sky_coord=None, distortion=0,
-                             return_matches=False, return_catalog=False,
+                             solve_timeout=5000, target_pixel=None, target_sky_coord=None,
+                             distortion=0, return_matches=False, return_catalog=False,
                              return_visual=False, return_rotation_matrix=False,
                              match_max_error=.002, pattern_checking_stars=None):
         """Solve for the sky location using a list of centroids.
@@ -1782,7 +1784,8 @@ class Tetra3():
 
         if num_centroids > verification_stars_per_fov:
             image_centroids = image_centroids[:verification_stars_per_fov, :]
-            self._logger.debug('Trimmed %d match centroids to %d' % (num_centroids, len(image_centroids)))
+            self._logger.debug('Trimmed %d match centroids to %d' %
+                               (num_centroids, len(image_centroids)))
             num_centroids = len(image_centroids)
 
         if isinstance(distortion, (list, tuple)):
@@ -1828,7 +1831,8 @@ class Tetra3():
                 self._cancelled = False
                 break
 
-            # Set largest distance to None, this is cached to avoid recalculating in future FOV estimation.
+            # Set largest distance to None, this is cached to avoid recalculating in future
+            # FOV estimation.
             image_pattern_largest_distance = None
 
             image_pattern_vectors = image_centroids_vectors[image_pattern_indices, :]
@@ -1846,15 +1850,16 @@ class Tetra3():
             pattern_key_space_min = np.maximum(0, image_pattern_edge_ratio_min*p_bins).astype(int)
             pattern_key_space_max = np.minimum(p_bins, image_pattern_edge_ratio_max*p_bins).astype(int)
             # Make a list of the low/high values in each binned edge ratio position.
-            pattern_key_range = list(range(low, high + 1) for (low, high) in zip(pattern_key_space_min,
-                                                                                 pattern_key_space_max))
+            pattern_key_range = list(range(low, high + 1) for (low, high) in zip(
+                pattern_key_space_min, pattern_key_space_max))
             def dist(pattern_key):
                 return sum((a-b)*(a-b) for (a, b) in zip(pattern_key, image_pattern_key))
 
             # Make a list of all pattern keys to explore; tag each with its distance from
             # 'image_pattern_key' for sorting, so the first pattern key values we try are the
             # ones closest to what we measured in the image to be solved.
-            pattern_key_list = list((dist(code), code) for code in itertools.product(*pattern_key_range))
+            pattern_key_list = list((dist(code), code) for code in itertools.product(
+                *pattern_key_range))
             pattern_key_list.sort()
 
             # Iterate over pattern keys, starting from 'image_pattern_key' and working
@@ -1876,7 +1881,8 @@ class Tetra3():
                 catalog_lookup_count += len(catalog_pattern_edges)
 
                 all_catalog_largest_edges = catalog_pattern_edges[:, -1]
-                all_catalog_edge_ratios = catalog_pattern_edges[:, :-1] / all_catalog_largest_edges[:, None]
+                all_catalog_edge_ratios = (catalog_pattern_edges[:, :-1] /
+                                           all_catalog_largest_edges[:, None])
 
                 # Compare catalogue edge ratios to the min/max range from the image pattern.
                 valid_patterns = np.argwhere(np.all(np.logical_and(
@@ -1921,13 +1927,17 @@ class Tetra3():
                         # find the centroid, or average position, of the star pattern
                         catalog_centroid = np.mean(catalog_pattern_vectors, axis=0)
                         # calculate each star's radius, or Euclidean distance from the centroid
-                        catalog_radii = cdist(catalog_pattern_vectors, catalog_centroid[None, :]).flatten()
+                        catalog_radii = cdist(catalog_pattern_vectors,
+                                              catalog_centroid[None, :]).flatten()
                         # use the radii to uniquely order the catalog vectors
                         catalog_pattern_vectors = catalog_pattern_vectors[np.argsort(catalog_radii)]
 
                     # Use the pattern match to find an estimate for the image's rotation matrix
                     rotation_matrix = _find_rotation_matrix(image_pattern_vectors,
                                                             catalog_pattern_vectors)
+                    if np.linalg.det(rotation_matrix) < 0:
+                        # Reject false positive due to implausible rotation matrix.
+                        continue
 
                     # Find all catalog star vectors inside the (diagonal) field of view for
                     # matching, in catalog brightness order.
@@ -1937,8 +1947,10 @@ class Tetra3():
                         image_center_vector, fov_diagonal_rad/2)
                     nearby_cat_star_vectors = self.star_table[nearby_cat_star_inds, 2:5]
 
-                    # Derotate nearby catalog stars and get their (undistorted) centroids using coarse fov
-                    nearby_cat_star_vectors_derot = np.dot(rotation_matrix, nearby_cat_star_vectors.T).T
+                    # Derotate nearby catalog stars and get their (undistorted) centroids using
+                    # coarse fov.
+                    nearby_cat_star_vectors_derot = np.dot(rotation_matrix,
+                                                           nearby_cat_star_vectors.T).T
                     (nearby_cat_star_centroids, kept) = _compute_centroids(
                         nearby_cat_star_vectors_derot, (height, width), fov)
                     nearby_cat_star_centroids = nearby_cat_star_centroids[kept, :]
@@ -1987,8 +1999,9 @@ class Tetra3():
                     # Recompute rotation matrix for more accuracy. The earlier rotation
                     # matrix was calculated using the pattern stars; the recomputed rotation
                     # matrix uses all star matches, not just the pattern stars.
-                    rotation_matrix = _find_rotation_matrix(matched_image_vectors, matched_catalog_vectors)
-                    # extract right ascension, declination, and roll from rotation matrix
+                    rotation_matrix = _find_rotation_matrix(matched_image_vectors,
+                                                            matched_catalog_vectors)
+                    # Extract right ascension, declination, and roll from rotation matrix.
                     ra = np.rad2deg(np.arctan2(rotation_matrix[0, 1],
                                                rotation_matrix[0, 0])) % 360
                     dec = np.rad2deg(np.arctan2(rotation_matrix[0, 2],
@@ -2004,9 +2017,11 @@ class Tetra3():
                         fov *= np.mean(angles_catalogue / angles_camera)
                         k = None
                     else:
-                        # Accurately calculate the FOV and distortion by looking at the angle from boresight
-                        # on all matched catalogue vectors and all matched image centroids
-                        matched_catalog_vectors_derot = np.dot(rotation_matrix, matched_catalog_vectors.T).T
+                        # Accurately calculate the FOV and distortion by looking at the angle
+                        # from boresight on all matched catalogue vectors and all matched
+                        # image centroids
+                        matched_catalog_vectors_derot = np.dot(
+                            rotation_matrix, matched_catalog_vectors.T).T
                         tangent_matched_catalog_vectors = norm(
                             matched_catalog_vectors_derot[:, 1:], axis=1) \
                             /matched_catalog_vectors_derot[:, 0]
@@ -2025,15 +2040,19 @@ class Tetra3():
                         (f, k) = lstsq(A, b, rcond=None)[0].flatten()
                         # Correct focal length to be at horizontal FOV
                         f = f/(1 - k)
-                        self._logger.debug('Calculated focal length to %.2f and distortion to %.3f' % (f, k))
+                        self._logger.debug('Calculated focal length to %.2f and distortion to %.3f' %
+                                           (f, k))
                         # Calculate (horizontal) true field of view
                         fov = 2*np.arctan(1/f)
                         # Re-undistort centroids using updated distortion for final calculations
-                        image_centroids_undist = _undistort_centroids(image_centroids, (height, width), k)
-                        matched_image_centroids_undist = image_centroids_undist[matched_stars[:, 0], :]
+                        image_centroids_undist = _undistort_centroids(image_centroids,
+                                                                      (height, width), k)
+                        matched_image_centroids_undist = image_centroids_undist[
+                            matched_stars[:, 0], :]
 
                     # Re-apply refined rotation matrix and FOV to nearby_cat_star_vectors.
-                    nearby_cat_star_vectors_derot = np.dot(rotation_matrix, nearby_cat_star_vectors.T).T
+                    nearby_cat_star_vectors_derot = np.dot(rotation_matrix,
+                                                           nearby_cat_star_vectors.T).T
                     (nearby_cat_star_centroids, kept) = _compute_centroids(
                         nearby_cat_star_vectors_derot, (height, width), fov)
 
@@ -2324,7 +2343,8 @@ class Tetra3():
             star_catalog = catalog_file_full_pathname.name.rstrip(catalog_file_full_pathname.suffix)
 
         if star_catalog not in _supported_databases:
-            raise ValueError(f"star_catalog name must be one of {_supported_databases}, got: {star_catalog}")
+            raise ValueError(
+                f"star_catalog name must be one of {_supported_databases}, got: {star_catalog}")
 
         # Add .dat suffix for hip and tyc if not present
         if star_catalog in ('hip_main', 'tyc_main') and not catalog_file_full_pathname.suffix:
