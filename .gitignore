@@ -8,6 +8,7 @@
 .devcontainer/
 
 # Local Development
+.cedar_venv/
 .venv/
 venv/
 .venv*/
