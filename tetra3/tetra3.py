@@ -2730,7 +2730,7 @@ def get_centroids_from_image(image, sigma=2, image_th=None, crop=None, downsampl
         extracted[:, 1:3] = extracted[:, 1:3] * downsample  # Scale centroid
     if crop:
         extracted[:, 1:3] = extracted[:, 1:3] + np.array([offs_h, offs_w])  # Offset centroid
-    # Return results, default just the centroids 
+    # Return results, default just the centroids
     if not any((return_moments, return_images)):
         return extracted[:, 1:3]
     # Otherwise, build list of requested returned items
