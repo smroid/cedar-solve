@@ -140,7 +140,7 @@ class CedarDetectClient:
                 req = cedar_detect_pb2.CentroidsRequest(
                     input_image=im, sigma=sigma, return_binned=False,
                     binning=binning, use_binned_for_star_candidates=use_binned,
-                    detect_hot_pixels=detect_hot_pixels, normalize_rows=normalize_rows)
+                    detect_hot_pixels=detect_hot_pixels)
                 try:
                     centroids_result = self._get_stub().ExtractCentroids(req,
                                                                          wait_for_ready=True,
@@ -166,7 +166,7 @@ class CedarDetectClient:
                 req = cedar_detect_pb2.CentroidsRequest(
                     input_image=im, sigma=sigma, return_binned=False,
                     binning=binning, use_binned_for_star_candidates=use_binned,
-                    detect_hot_pixels=detect_hot_pixels, normalize_rows=normalize_rows)
+                    detect_hot_pixels=detect_hot_pixels)
                 try:
                     centroids_result = self._get_stub().ExtractCentroids(req)
                     break  # Succeeded, break out of retry loop.

@@ -55,7 +55,7 @@ try:
                 if USE_CEDAR_DETECT:
                     centroids = cedar_detect.extract_centroids(
                         np_image, sigma=8, use_binned=True,
-                        detect_hot_pixels=True, normalize_rows=True)
+                        detect_hot_pixels=True)
                 else:
                     centroids = tetra3.get_centroids_from_image(np_image)
                 t_extract = (precision_timestamp() - t0)*1000
@@ -64,7 +64,7 @@ try:
                 print('File %s, extracted %d centroids in %.2fms' %
                       (basename, len(centroids), t_extract))
 
-                # Draw a small blue circle around each centroid.
+                # Draw a small yellow circle around each centroid.
                 # Stars early in list (bright) get brighter circle.
                 (width, height) = img.size[:2]
                 out_img = Image.new('RGB', (width, height))
@@ -74,7 +74,8 @@ try:
                 for cent in centroids:
                     progress = index / len(centroids)
                     circle_brightness = 100 + ((1.0 - progress) * 155.0)
-                    draw_circle(img_draw, cent, 4, outline=(20, 20, int(circle_brightness)))
+                    draw_circle(img_draw, cent, 4,
+                                outline=(int(circle_brightness), int(circle_brightness), 20))
                     index += 1
 
                 # Here you can add e.g. `fov_estimate`/`fov_max_error` to improve speed or a
