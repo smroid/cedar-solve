@@ -52,3 +52,8 @@ tetra3/bin/cedar-detect-server
 
 # Emacs backup files.
 *~
+
+# Downloaded remote e2e corpus (fetched via tools/fetch_corpus.py), and the
+# corpus tarball produced when regenerating it (see tests/data/README.md).
+tests/data/synthetic_large/
+cedar_e2e_*.tar.gz

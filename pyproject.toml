@@ -70,6 +70,8 @@ exclude = [
 testpaths = [
     "tests",
 ]
+addopts = "-m 'not e2e'"
 markers = [
     "slow: These tests are slow (deselect with '-m \"not slow\"')",
+    "e2e: Realistic-image plate-solve e2e tests (opt-in; run with '-m e2e'). See tests/test_solve_e2e.py.",
 ]
