@@ -1,6 +1,6 @@
 {
   "synthetic_v1": {
-    "url": "https://github.com/trams/cedar-solve/releases/download/e2e-corpus-v1/cedar_e2e_synthetic_v1.tar.gz",
+    "url": "https://github.com/smroid/cedar-solve/releases/download/e2e-corpus-v1/cedar_e2e_synthetic_v1.tar.gz",
     "sha256": "98a54e2dea4984ad84d6eb129b56ff08317a6c935d3a8bf795ce3373e40dfee5",
     "n_fields": 99,
     "description": "99 synthetic Gaia DR3 fields (box spec 12.71x7.16 deg) for the e2e plate-solve suite. Regenerable via tools/gen_corpus.py --grid 100."
