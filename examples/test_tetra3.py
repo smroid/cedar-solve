@@ -9,10 +9,16 @@ import sys
 print("path %s" % sys.path)
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 from pathlib import Path
 from time import perf_counter as precision_timestamp
 EXAMPLES_DIR = Path(__file__).parent
+
+# Try to load a font, fall back to default if not available
+try:
+    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 10)
+except:
+    font = ImageFont.load_default()
 
 import tetra3
 
@@ -76,6 +82,10 @@ try:
                     circle_brightness = 100 + ((1.0 - progress) * 155.0)
                     draw_circle(img_draw, cent, 4,
                                 outline=(int(circle_brightness), int(circle_brightness), 20))
+                    # Add x,y coordinate text annotation.
+                    coord_text = f"({int(cent[1])},{int(cent[0])})"
+                    img_draw.text((cent[1] + 6, cent[0] - 6), coord_text,
+                                  fill=(int(circle_brightness), int(circle_brightness), 20), font=font)
                     index += 1
 
                 # Here you can add e.g. `fov_estimate`/`fov_max_error` to improve speed or a
